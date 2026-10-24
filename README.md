@@ -1,35 +1,16 @@
-# minutes
+# Minutes | AI Desktop Meeting Assistant
 
+A desktop application for recording, transcribing, and managing meetings locally.
 
+### Features
+- Meeting and voice recording
+- Speech-to-text transcription
+- Searchable meeting history
+- AI-assisted meeting summaries
+- Integration with AI tools using MCP
 
-[useminutes.app](https://useminutes.app)
-
-Minutes is a free, open-source conversation memory app for the AI you already use. Record and transcribe meetings, calls, voice memos, and dictation on your device, then let Claude Code, Codex, Cursor, or another MCP client search the history you choose to share. Your records are Markdown files you own in `~/meetings/`.
-
-Capture, transcription, and storage run locally. If you choose a cloud AI assistant or summarizer, the meeting context you authorize is sent to that provider.
-
-**Your conversations. Your memory. Ready for the AI you use.**
-
-<p align="center">
-  <img src="docs/assets/demo.gif" alt="minutes demo; record, dictate, phone sync, AI recall" width="750">
-</p>
-
-## Install
-
-Choose the desktop app or one standalone CLI installation. The desktop app
-includes a CLI: use **About Minutes → Set up CLI** to add it to your PATH.
-
-```bash
-brew install --cask silverstein/tap/minutes  # Desktop app, with bundled CLI
-brew install silverstein/tap/minutes         # Standalone CLI alternative
-cargo install minutes-cli                   # Standalone CLI via Cargo
-```
-
-For an agent connection, add the MCP server separately with
-`claude mcp add minutes -- npx -y minutes-mcp` (or run `npx minutes-mcp`
-from another MCP client).
-
-If Homebrew reports an untrusted tap, run `brew trust silverstein/tap` once.
+### Technology Stack
+Rust, Tauri, TypeScript, Python
 
 ## Ask your agent
 
