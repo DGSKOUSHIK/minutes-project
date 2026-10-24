@@ -1,140 +1,366 @@
 # Minutes | AI Desktop Meeting Assistant
 
-A desktop application for recording, transcribing, and managing meetings locally.
+**A local-first desktop application for meeting transcription, AI-powered conversation management, and searchable meeting history.**
 
-### Features
-- Meeting and voice recording
-- Speech-to-text transcription
-- Searchable meeting history
-- AI-assisted meeting summaries
-- Integration with AI tools using MCP
+Minutes helps users capture meetings, calls, voice notes, and dictation. It converts speech into text, organizes conversation records, and enables AI assistants to access authorized meeting history through the Model Context Protocol (MCP).
 
-### Technology Stack
-Rust, Tauri, TypeScript, Python
+The application focuses on local data storage, user-controlled sharing, and compatibility with AI development tools.
 
-## Ask your agent
+## 1. Project Overview
 
-Add Minutes to your agent, seed five sample meetings (no mic needed), then ask about them:
+| Attribute | Details |
+|---|---|
+| Project Name | Minutes |
+| Application Type | Desktop Application |
+| Category | AI, Speech Processing, Productivity |
+| Core Language | Rust |
+| Desktop Framework | Tauri |
+| Additional Technologies | TypeScript, Python, JavaScript |
+| AI Integration | Model Context Protocol (MCP) |
+| Storage | Local Markdown and YAML files |
+| Primary Function | Meeting recording, transcription, and retrieval |
+| Supported Interfaces | Desktop Application, CLI, MCP Server, SDK |
+
+## 2. Key Features
+
+| Feature | Description |
+|---|---|
+| Meeting Recording | Capture conversations, meetings, calls, and voice notes |
+| Speech-to-Text | Convert recorded speech into text using local transcription |
+| AI Summarization | Generate structured meeting summaries using supported AI providers |
+| Action Item Extraction | Organize follow-up tasks and decisions from conversations |
+| Meeting History | Maintain searchable records of past conversations |
+| Voice Dictation | Convert spoken input into written text |
+| MCP Integration | Allow compatible AI assistants to search authorized meeting records |
+| Local Storage | Store conversation records in user-controlled Markdown files |
+| Privacy Controls | Control what meeting information is shared with external services |
+| Command-Line Interface | Manage recording and retrieval through terminal commands |
+| Recovery | Support recovery workflows for interrupted audio processing |
+| Structured Metadata | Store meeting details using YAML frontmatter |
+
+## 3. Technology Stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| Core Backend | Rust | Application logic and processing |
+| Desktop Framework | Tauri | Native desktop application |
+| Application Logic | TypeScript | Integrations and client functionality |
+| Supporting Scripts | Python | Processing, testing, and automation |
+| UI Components | HTML, CSS, JavaScript | Desktop interface |
+| AI Connectivity | MCP | AI assistant communication |
+| Data Format | Markdown | Readable meeting records |
+| Metadata | YAML | Structured information |
+| Version Control | Git | Source code management |
+| Repository Hosting | GitHub | Source code and documentation |
+
+## 4. System Architecture
+
+The application consists of several connected components.
+
+| Component | Responsibility |
+|---|---|
+| Desktop Interface | Provides recording, transcription, and meeting management controls |
+| Audio Capture | Collects input from supported audio sources |
+| Transcription Engine | Converts recorded audio into text |
+| Meeting Processor | Organizes transcript content and metadata |
+| Summarization Integration | Sends authorized content to configured summarization providers |
+| Local File Storage | Stores Markdown meeting records |
+| Search and Retrieval | Finds relevant meeting information |
+| MCP Server | Exposes supported meeting operations to AI assistants |
+| CLI | Provides terminal-based application controls |
+| SDK | Enables programmatic access to meeting information |
+
+### High-Level Workflow
+
+```text
+              USER
+               |
+               v
+      +-------------------+
+      | Desktop Interface |
+      +-------------------+
+               |
+               v
+      +-------------------+
+      |   Audio Capture   |
+      +-------------------+
+               |
+               v
+      +-------------------+
+      | Local Transcription|
+      +-------------------+
+               |
+               v
+      +-------------------+
+      | Meeting Processing|
+      +-------------------+
+               |
+       +-------+--------+
+       |                |
+       v                v
++-------------+  +----------------+
+| Local Files |  | AI Summarizer  |
+| Markdown    |  | (Optional)     |
++-------------+  +----------------+
+       |
+       v
++---------------------+
+| Search and Retrieval|
++---------------------+
+       |
+       v
++---------------------+
+| MCP Server / CLI    |
++---------------------+
+       |
+       v
++---------------------+
+| AI Assistant        |
++---------------------+
+```
+
+## 5. Supported Interfaces
+
+| Interface | Function |
+|---|---|
+| Desktop App | Recording, dictation, viewing, and managing conversations |
+| CLI | Recording controls, processing, searching, and automation |
+| MCP Server | AI agent access to authorized meeting information |
+| TypeScript SDK | Programmatic access to supported meeting data |
+| Markdown Files | Direct access to locally stored meeting records |
+
+## 6. AI Assistant Integration
+
+Minutes supports integration with tools that can communicate through MCP.
+
+| AI Tool | Integration Type |
+|---|---|
+| Claude Code | MCP |
+| Codex | MCP |
+| Cursor | MCP |
+| OpenCode | MCP |
+| Gemini CLI | MCP |
+| Claude Desktop | MCP |
+| Mistral Vibe | MCP |
+| Other MCP Clients | MCP-compatible connection |
+
+### Example MCP Setup
+
+For Claude Code:
 
 ```bash
 claude mcp add minutes -- npx -y minutes-mcp
-minutes demo --full
 ```
 
-> What did we decide about monthly billing, and did it stick?
+The MCP server provides compatible assistants with access to permitted meeting operations.
 
-The answer spans two meetings a month apart: launched on Feb 28, reversed on Mar 25.
+### Example Query
 
-A direct MCP call uses the same local meeting files:
+A user can ask an AI assistant:
 
-```text
-search_meetings({"query":"monthly billing decision"})
-```
+> What decisions were made in our previous project planning meeting?
 
-Record a real one with `minutes record`, then `minutes stop` to transcribe. `minutes demo --clean` removes the samples.
-Setup: [Codex, Gemini CLI, and Claude Desktop](docs/integration/clients.md#any-mcp-client-claude-code-codex-opencode-gemini-cli-claude-desktop-or-your-own-agent),
-[Cursor](docs/integration/cursor-agent.md),
-[OpenCode](docs/integration/clients.md#opencode-cli),
-[Pi](docs/integration/pi-agent.md),
-[Mistral Vibe](docs/integration/clients.md#mistral-vibe), and
-[Cowork or Dispatch](docs/integration/clients.md#cowork--dispatch).
+The assistant can search available meeting records and return relevant information when the client and permissions are configured.
 
-### Works with
+## 7. Meeting Record Format
 
-Claude Code · Codex · Cursor · OpenCode · Pi · Gemini CLI · Claude Desktop ·
-Mistral Vibe · Cowork · Dispatch · Obsidian · Logseq · any MCP client
+Meeting records use Markdown files with structured YAML metadata.
 
-## How it compares
-
-| Workflow | Granola | Otter.ai | Anarlog (formerly Hyprnote) | Minutes |
-|---|---|---|---|---|
-| Product | Hosted meeting notepad | Hosted meeting assistant | Local meeting notepad | Local conversation memory |
-| Agent access | Hosted MCP | Hosted integrations | CLI + MCP | Local files, MCP, CLI, SDK |
-| Primary storage | Hosted workspace | Hosted workspace | Local SQLite + files | Local Markdown + YAML |
-| Local AI | Cloud transcription | Cloud transcription | With local providers | Local transcription; AI provider of your choice |
-
-Reviewed September 5, 2026 against [Granola MCP](https://docs.granola.ai/help-center/sharing/integrations/mcp), [Otter privacy and security](https://otter.ai/privacy-security), and the [Anarlog repository](https://github.com/fastrepl/anarlog). Anarlog's community app is MIT; its enterprise components use a commercial license. See [the detailed comparison](https://useminutes.app/compare/hyprnote-vs-minutes) and [open-source alternatives](https://useminutes.app/resources/open-source-alternatives-to-granola-ai) for fit and limitations.
-
-## Who it's for
-
-Agent-first users treat Minutes as the capture layer of a local second brain.
-They search meetings through Claude Code, Cursor, Codex, OpenCode, MCP, or the
-CLI, then fold useful context into a vault or wiki they own.
-
-Desktop notetaker users record and read results in the app. They value reliable
-setup, clear processing and recovery, Recall, documents, Coach, and summary
-quality. See the full [persona notes](docs/personas.md).
-
-## Surfaces
-
-| Surface | What it provides | Docs |
-|---|---|---|
-| Desktop app | Menu bar capture, dictation, Recall, documents, and Coach. | [Install](docs/install.md#desktop-app) |
-| CLI (60 commands) | Local recording, processing, search, import, and automation. | [Commands](docs/features.md) |
-| MCP server (34 tools) | Local meeting tools and resources for any MCP client. | [MCP reference](docs/integration/agent-integrations.md) |
-| Claude Code plugin (23 skills) | Prep, capture, live help, debrief, and memory workflows. | [Client setup](docs/integration/clients.md#claude-code-plugin) |
-| SDK | TypeScript access to meeting files without MCP. | [Agent architecture](docs/architecture/README.md#building-your-own-agent-on-minutes) |
-
-## Dictation
-
-The desktop Dictation settings bring writing preferences, personal spellings and snippets, microphone selection, and recent text together. Cursor context is optional and stays on the Mac. Recovery restores text for review; local edits use an explicit Ollama preview, and spelling corrections require confirmation.
-
-See [dictation behavior and evaluation boundaries](docs/design/dictation-experience.md) for supported fields, safe insertion and undo, clipboard restoration, and the synthetic benchmark.
-
-## Output format
-
-Meetings are plain markdown with structured YAML frontmatter:
+### Example
 
 ```yaml
 ---
-title: Q2 Pricing Discussion with Alex
+title: Project Planning Meeting
 type: meeting
-date: 2026-03-17T14:00:00
-duration: 42m
-context: Discuss Q2 pricing
+date: 2026-10-15T10:00:00
+duration: 45m
+context: Sprint planning and task allocation
+
 action_items:
-  - assignee: mat
-    task: Send pricing doc
-    due: Friday
+  - assignee: Developer A
+    task: Complete API integration
     status: open
+
+  - assignee: Developer B
+    task: Prepare UI components
+    status: open
+
 decisions:
-  - text: Test monthly billing with 10 advisors
+  - text: Complete the first development milestone
 ---
 ```
 
-See the [frontmatter schema](docs/architecture/frontmatter-schema.md). Files work
-with [Obsidian](https://obsidian.md), grep, and any markdown tool.
+### Metadata Fields
 
-## Privacy & consent
+| Field | Description |
+|---|---|
+| `title` | Meeting name |
+| `type` | Record category |
+| `date` | Meeting date and time |
+| `duration` | Recording duration |
+| `context` | Purpose of the meeting |
+| `action_items` | Tasks assigned during the meeting |
+| `assignee` | Person responsible for a task |
+| `status` | Task completion status |
+| `decisions` | Decisions recorded during the meeting |
 
-- Transcription and speaker processing run on-device. Audio stays on your machine.
-- Sensitive meetings save typed markers without audio and default to restricted.
-- Consent reminders, acknowledgement, and provenance help you disclose recording.
-- Text leaves the machine only when you send authorized context to a cloud agent or summarizer.
+## 8. Installation and Development
 
-See the [security documentation](docs/security/) and
-[consent enforcement design](docs/architecture/consent-enforcement.md).
+### Prerequisites
 
-## Docs
+The development environment depends on the operating system and the components being built.
 
-- [Features and commands](docs/features.md)
-- [Install, setup, updating, and troubleshooting](docs/install.md)
-- [Agent and MCP client integrations](docs/integration/clients.md)
-- [Phone voice memo pipeline](docs/phone-voice-memo-pipeline.md)
-- [Summarization and automation](docs/architecture/summarization.md)
-- [Configuration](docs/configuration.md)
-- [Architecture and agent development](docs/architecture/README.md)
-- [Evidence, retrieval, and decision-history contracts](docs/architecture/evidence-memory.md)
-- [Recall and speech evaluation](tests/eval/v02/README.md)
-- [Switching from Granola and importing archives](docs/switching-from-granola.md)
-- [Frontmatter schema](docs/architecture/frontmatter-schema.md)
-- [Security](docs/security/)
-- [Personas](docs/personas.md)
-- [Native call capture recovery](docs/native-capture-recovery.md) (`minutes recover-stem`)
-- [Opt-in automatic call recording](docs/call-auto-record.md) for Teams and Zoom desktop on macOS
-- [MCP tools](https://useminutes.app/docs/mcp/tools)
-- [Error reference](https://useminutes.app/docs/errors)
-- [Agent index](https://useminutes.app/llms.txt)
-- [Full agent index](https://useminutes.app/llms-full.txt)
+| Tool | Purpose |
+|---|---|
+| Git | Clone the repository |
+| Rust and Cargo | Build Rust components |
+| Tauri prerequisites | Build the desktop application |
+| Node.js and npm | Support JavaScript-based tooling |
+| Python | Run supporting Python scripts |
+| C++ Build Tools | Native compilation where required |
 
+### Clone the Repository
 
+```bash
+git clone https://github.com/DGSKOUSHIK/minutes-project.git
+cd minutes-project
+```
+
+### Inspect the Rust Workspace
+
+```bash
+cargo metadata --no-deps
+```
+
+### Run the Rust Test Suite
+
+```bash
+cargo test --workspace
+```
+
+The commands above require the appropriate development dependencies. The full desktop application may need additional platform-specific configuration.
+
+For detailed setup information, see `docs/install.md` in the repository.
+
+## 9. Repository Structure
+
+```text
+minutes-project/
+|
+|-- .github/
+|-- crates/
+|-- tauri/
+|-- sidecars/
+|-- integrations/
+|-- schema/
+|-- scripts/
+|-- tests/
+|-- tooling/
+|-- examples/
+|-- docs/
+|-- design/
+|-- site/
+|
+|-- Cargo.toml
+|-- Cargo.lock
+|-- README.md
+|-- LICENSE
+|-- NOTICE
+```
+
+### Directory Details
+
+| Directory | Purpose |
+|---|---|
+| `crates/` | Rust workspace components |
+| `tauri/` | Desktop application source |
+| `sidecars/` | Supporting processing services |
+| `integrations/` | External integrations |
+| `schema/` | Structured data definitions |
+| `scripts/` | Development and automation scripts |
+| `tests/` | Test suites and validation |
+| `tooling/` | Developer tools |
+| `examples/` | Usage examples |
+| `docs/` | Technical documentation |
+| `design/` | Application design information |
+| `site/` | Website-related source files |
+| `.github/` | GitHub configuration |
+
+## 10. Privacy and Data Management
+
+The application follows a local-first approach.
+
+| Area | Implementation |
+|---|---|
+| Audio Processing | Local processing for supported transcription workflows |
+| Meeting Records | User-controlled local files |
+| Cloud Summarization | Optional and provider-dependent |
+| AI Assistant Access | Authorized meeting context |
+| File Format | Readable Markdown with YAML metadata |
+| Data Portability | Records can be used with compatible text tools |
+| Sensitive Information | Restricted handling for supported sensitive-record workflows |
+
+When configured to use cloud AI services, authorized content may leave the local device. Users should review the selected provider and data-sharing settings.
+
+## 11. Application Workflow
+
+| Step | Process | Result |
+|---|---|---|
+| 1 | Start recording | Audio capture begins |
+| 2 | Stop recording | Recorded audio is prepared for processing |
+| 3 | Transcribe | Speech is converted into text |
+| 4 | Organize | Meeting metadata is recorded |
+| 5 | Summarize | Optional AI summary is generated |
+| 6 | Store | Meeting record is saved locally |
+| 7 | Search | Previous conversation content can be retrieved |
+| 8 | Integrate | Authorized content becomes accessible to MCP clients |
+
+## 12. Testing and Validation
+
+The repository includes tests and supporting tools for application components.
+
+| Test Area | Purpose |
+|---|---|
+| Rust Unit Tests | Validate core functionality |
+| Integration Tests | Check interactions between components |
+| Audio Processing Tests | Validate processing behavior |
+| CLI Tests | Verify command-line operations |
+| MCP Tests | Check supported agent integration contracts |
+| Desktop Tests | Test application behavior on supported platforms |
+| Privacy Tests | Validate relevant data-handling rules |
+
+Test availability and results depend on the development environment. A successful repository upload does not by itself confirm that all tests pass.
+
+## 13. Development Roadmap
+
+The following are potential future enhancements, not claims of completed functionality.
+
+| Planned Improvement | Objective |
+|---|---|
+| Transcription Improvements | Improve recognition quality for different accents and environments |
+| Speaker Identification | Improve speaker separation in multi-person meetings |
+| Semantic Search | Improve retrieval of relevant conversation details |
+| Summary Customization | Provide flexible meeting-summary formats |
+| Task Management | Improve action item organization |
+| Export Options | Support additional report and document formats |
+| Desktop Experience | Improve usability and workflow navigation |
+| Integration Expansion | Support additional compatible AI tools |
+
+## 14. Technical Documentation
+
+| Document | Description |
+|---|---|
+| `docs/install.md` | Installation and development setup |
+| `docs/features.md` | Application features and CLI commands |
+| `docs/configuration.md` | Configuration options |
+| `docs/architecture/README.md` | Architecture and application design |
+| `docs/integration/clients.md` | AI client integrations |
+| `docs/architecture/frontmatter-schema.md` | Meeting metadata format |
+| `docs/security/` | Security documentation |
+| `CONTRIBUTING.md` | Contribution guidance |
+| `LICENSE` | Software license |
+| `NOTICE` | Copyright and attribution notices |
+
+## 15. License
+
+Distributed under the MIT License. See the repository's `LICENSE` and `NOTICE` files for the applicable terms and copyright information.
