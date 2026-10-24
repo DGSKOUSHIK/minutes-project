@@ -159,13 +159,4 @@ See the [security documentation](docs/security/) and
 - [Agent index](https://useminutes.app/llms.txt)
 - [Full agent index](https://useminutes.app/llms-full.txt)
 
-## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Minutes is MIT licensed and staying that way: no relicensing, no paid tier for anything in this repo.
-
-MIT. Built by [Mat Silverstein](https://github.com/silverstein), founder of
-[X1 Wealth](https://x1wealth.com).
-
-## Star History
-
-[![Star History Chart](https://star-history.dera.page/svg?repos=silverstein/minutes&type=Date)](https://star-history.dera.page/#silverstein/minutes&Date)
