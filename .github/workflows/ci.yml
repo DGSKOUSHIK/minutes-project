@@ -1,0 +1,1210 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# One live run per PR: a new push supersedes the previous run's results, so
+# cancel it instead of letting it hold runners for 30+ minutes. Pushes to
+# main keep every run (each merge commit is worth a full result).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  # Standard for CI: incremental data is never reused between runs. It did
+  # not measurably shrink the cached target/ directories (#1109).
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  # Detect which areas of the repo changed so heavy Rust/Tauri jobs can
+  # skip when a PR only touches docs, site/, MCP, skills, or scripts.
+  # The Windows Desktop Installer job alone is ~20 min; on a no-Rust PR
+  # that's pure waste. Any path touched by the `rust` filter triggers the
+  # full desktop/test/install matrix. The workflow file itself is in the
+  # filter defensively, so edits to CI always get verified end-to-end.
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      site: ${{ steps.filter.outputs.site }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            site:
+              # The landing page is the product demo, and nothing in CI
+              # compiled it until now: a TypeScript major bump merged green
+              # here while never having been built, because the only site job
+              # checks release constants. Cloudflare Pages would have caught a
+              # broken build at deploy time, after merge.
+              - 'site/**'
+              - '.github/workflows/ci.yml'
+            rust:
+              - 'tauri/**'
+              # Enumerated, not 'crates/**'. crates/mcp and crates/sdk are npm
+              # packages, not workspace members: neither has a Cargo.toml and
+              # between them they hold zero .rs files, so 'crates/**' ran
+              # test x3, install x2, the Linux full build and the Windows
+              # desktop installer on every TypeScript-only PR.
+              #
+              # Negation entries ('!crates/mcp/**') cannot do this: the action
+              # compiles each pattern separately, and a lone negated pattern
+              # matches every file outside its own subtree, which would make the
+              # filter always true. scripts/check_ci_rust_filter.mjs keeps this
+              # list in step with the workspace members instead.
+              - 'crates/core/**'
+              - 'crates/cli/**'
+              - 'crates/reader/**'
+              - 'crates/whisper-guard/**'
+              # Excluded from the workspace (it downloads the sherpa bundle),
+              # so `cargo clippy --all` never reaches it and only the filter
+              # keeps it covered.
+              - 'crates/sherpa-plugin/**'
+              - 'crates/archive-convert/**'
+              - 'crates/archive-core/**'
+              - 'crates/archive-ocr/**'
+              - 'crates/archive-semantic/**'
+              - 'crates/archive-worker-control/**'
+              # Not a workspace member and not an npm package: fixture audio
+              # read by tests and scripts. 'crates/**' used to cover it.
+              - 'crates/assets/**'
+              - 'archive/**'
+              - 'tests/**'
+              # Declared as build inputs by tauri/src-tauri/build.rs via
+              # cargo:rerun-if-changed and copied into the shipped bundle, so a
+              # change here really is a Rust build change.
+              - '.agents/skills/**'
+              - '.opencode/skills/**'
+              - '.opencode/commands/**'
+              - 'scripts/calendar-events.swift'
+              - 'scripts/calendar-helper-Info.plist'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - 'tooling/test-coverage.json'
+              - 'scripts/test_coverage.py'
+              # The Windows desktop installer job installs the Tauri CLI with this.
+              - '.github/scripts/install-tauri-cli.sh'
+              # This file defines the Rust jobs and their caches, so editing it
+              # has to run them, and the main push that lands it seeds the caches.
+              - '.github/workflows/ci.yml'
+              # Workspace lint policy (disallowed-methods). `cargo clippy --all
+              # -- -D warnings` runs only inside the filtered test job, so
+              # without this a PR editing lint policy skipped every Rust job and
+              # reported green. crates/core/clippy.toml is covered by crates/**.
+              - 'clippy.toml'
+              # Shared by the standalone and desktop Windows release builds;
+              # changing the CPU ceiling must exercise the Windows artifact.
+              - '.github/scripts/export-windows-cpu-baseline.sh'
+              # Sets rustflags and build env per target, so it changes how every
+              # Rust target compiles. Omitting it meant a change that statically
+              # linked the Windows CRT skipped every Rust job and reported green
+              # (#657 follow-up).
+              - '.cargo/**'
+              - '.github/workflows/ci.yml'
+
+  test:
+    name: Test (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install audio dev headers (Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 20
+        run: .github/scripts/apt-install.sh libasound2-dev libpipewire-0.3-dev libspa-0.2-dev
+
+      - name: Set CXXFLAGS for whisper.cpp (macOS)
+        if: runner.os == 'macOS'
+        run: echo "CXXFLAGS=-I$(xcrun --show-sdk-path)/usr/include/c++/v1" >> "$GITHUB_ENV"
+
+      # Scope every cache to the exact runner image (ImageOS + ImageVersion).
+      # When `macos-latest` rotated from macOS 15 to macOS 26 the old target/ cache
+      # was restored onto the new image and the linker pulled
+      # `-L .../Xcode_16.4.app/.../clang/17/lib/darwin` (absent on macOS 26) ->
+      # "clang_rt.osx not found". We key on BOTH ImageOS and ImageVersion because
+      # ImageOS alone misses within-family bumps (e.g. macos26 swapping Xcode 26.4
+      # -> 26.5 on a weekly image update), which would re-poison compiled target/.
+      #
+      # ImageOS / ImageVersion are runner-injected env vars, NOT part of the
+      # ${{ env }} context (which only holds vars set via `env:` blocks), so the old
+      # `${{ env.ImageOS }}` key silently expanded to empty and never scoped anything.
+      # We compute the scope in a step and read it back as a step output below.
+      - name: Resolve runner image for cache scope
+        id: runner-image
+        shell: bash
+        run: echo "scope=${ImageOS:-noimage}-${ImageVersion:-noversion}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cargo cache
+        id: cargo-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ steps.runner-image.outputs.scope }}-cargo-noincr-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Test macOS call-detection device and attribution boundary
+        if: runner.os == 'macOS'
+        run: python3 scripts/test_mic_check.py
+
+      - name: Build core (no whisper)
+        run: cargo build -p minutes-core --no-default-features
+
+      - name: Build copilot core + CLI (cross-platform)
+        # PR #9 gate: compiles the local-socket transport as a Unix domain
+        # socket on macOS/Linux and a named pipe on Windows, together with the
+        # CLI attachment and measured model router.
+        run: cargo build -p minutes-core -p minutes-cli --no-default-features
+
+      - name: Build core with diarization (cross-platform)
+        run: cargo build -p minutes-core --no-default-features --features diarize
+
+      - name: Build core with streaming only (downstream consumer path)
+        # Catches cfg gating regressions where streaming-only modules
+        # (streaming_whisper, dictation, live_transcript) accidentally require
+        # whisper. Prompter is the canonical downstream consumer of this
+        # feature combo — it enables `streaming` for AudioStream + Vad but
+        # does its own whisper via whisper-rs directly. Without this step,
+        # breakage here only surfaces when Prompter next runs cargo build.
+        run: cargo build -p minutes-core --no-default-features --features streaming
+
+      - name: Build PocketStation capture (Windows and Linux)
+        if: runner.os == 'Windows' || runner.os == 'Linux'
+        run: cargo build -p minutes-core --no-default-features --features pocketstation-capture
+
+      - name: Test PocketStation capture (Windows and Linux)
+        if: runner.os == 'Windows' || runner.os == 'Linux'
+        run: python scripts/test_coverage.py run pocketstation
+        timeout-minutes: 15
+
+      - name: Clippy PocketStation capture (Windows and Linux)
+        if: runner.os == 'Windows' || runner.os == 'Linux'
+        run: cargo clippy -p minutes-core --no-default-features --features pocketstation-capture -- -D warnings
+
+      - name: Build core with parakeet (cross-platform)
+        # Guards against Linux-parakeet breakage that today only surfaces
+        # at tag push via release-cli.yml. The parakeet feature compiles
+        # on Unix (subprocess + optional sidecar via cfg all(parakeet,unix))
+        # and as a no-op stub elsewhere. Without this step, a feature-gated
+        # compile error in parakeet_sidecar or related code stays invisible
+        # on non-macOS until release.
+        run: cargo build -p minutes-core --no-default-features --features parakeet
+
+      - name: Test whisper-guard with the whisper feature (abort callback shim)
+        # The only tests that exercise whisper_guard::params::set_abort_callback.
+        # Every other test job runs --no-default-features, which is how the
+        # whisper-rs set_abort_callback_safe regression (every live sidecar
+        # pass aborted, v0.25.4 through v0.26.1) shipped through three
+        # releases unseen. whisper-rs is already compiled by the parakeet
+        # build above, so this adds little time.
+        run: cargo test -p whisper-guard --features whisper --lib -- --test-threads=1
+
+      - name: Test dictation and live speech (whisper + streaming)
+        # live_transcript.rs and streaming_whisper.rs are gated on
+        # all(streaming, whisper), so the --no-default-features test run
+        # below compiles none of their tests: the whisper-rs abort callback
+        # regression (#951) and the always-healthy status file (#952) both
+        # lived in exactly this code and shipped through three releases with
+        # green CI. No model is required; tests that need one are #[ignore].
+        # whisper-rs is already compiled by the parakeet build above.
+        # Derive the filters from the enabled feature-gated modules; a new
+        # module cannot compile successfully while silently running zero tests.
+        run: python scripts/test_coverage.py run speech
+        timeout-minutes: 10
+
+      - name: Ensure cmake for sherpa-rs (Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 20
+        run: .github/scripts/apt-install.sh cmake
+
+      - name: Build core with sherpa engine (all platforms)
+        # Opt-in sherpa-onnx engine (engine-sherpa). sherpa-rs-sys cmake-builds
+        # sherpa-onnx in-process. Now exercised on macOS + Linux + Windows so the
+        # cross-platform build is a verified gate for making sherpa the default
+        # (Windows runners ship cmake + MSVC). Catches engine-gated breakage that
+        # otherwise only surfaces at release, and exercises Linux beyond no-default-features.
+        run: cargo build -p minutes-core --no-default-features --features engine-sherpa
+
+      - name: Sherpa meeting model lifetime and fallback
+        if: runner.os != 'Windows'
+        # Compiles a tiny deterministic ABI fixture, with no model download.
+        run: cargo test -p minutes-core --no-default-features --features engine-sherpa --test sherpa_meeting_reuse -- --test-threads=1
+
+      - name: Sherpa and diarize share one binary (#685)
+        # The inverse of the guard this replaces. #683 proved the two stacks
+        # cannot be statically linked together; the plugin moved sherpa behind
+        # dlopen, so the combination must now COMPILE rather than refuse.
+        run: |
+          cargo check -p minutes-core --no-default-features --features diarize,engine-sherpa
+          cargo check -p minutes-core --no-default-features --features vad-ort,engine-sherpa
+
+      - name: Test optional engine and streaming-diarization contracts
+        # Loader/IPC and synthetic VAD tests only; no model or audio device.
+        # These dependencies are already compiled by the feature builds above.
+        run: python scripts/test_coverage.py run optional-engines
+        timeout-minutes: 10
+
+      - name: Build and test the isolated sherpa plugin
+        # Every platform, not just macOS: the plugin declares per-target sherpa
+        # dependencies, and the README claims the engine coexists with
+        # diarization everywhere, so Linux and Windows need a real compile.
+        # Excluded from the workspace, so nothing else in CI reaches it, which
+        # also means its FFI error-path tests only run here. Those exist
+        # because an ordinary failure message once panicked across the FFI
+        # boundary and no gate caught it.
+        working-directory: crates/sherpa-plugin
+        shell: bash
+        run: |
+          # Both: `cargo test` compiles the lib as a test harness and never
+          # emits the cdylib, so the export check below would find nothing.
+          cargo build --release --locked
+          cargo test --release --locked
+
+      - name: The host image must not link sherpa (#683, #685)
+        # The isolation property this whole design rests on, asserted rather
+        # than assumed: `cargo check` type-checks a feature combination, it
+        # does not prove the two native stacks stayed apart.
+        #
+        # Explicit bash: this job has no `defaults.shell`, so a `run:` block on
+        # windows-latest is pwsh and this script is a parse error there.
+        shell: bash
+        run: |
+          if cargo tree -p minutes-core --no-default-features \
+              --features diarize,engine-sherpa 2>/dev/null | grep -q 'sherpa-rs'; then
+            echo "::error::minutes-core links sherpa-rs again; the #683 collision is back"
+            exit 1
+          fi
+          echo "host graph is free of sherpa-rs"
+
+      - name: The plugin must not export ONNX Runtime symbols
+        if: runner.os == 'macOS'
+        # What actually keeps the two runtimes apart: if the cdylib exported
+        # OrtGetApiBase it could interpose on the host's copy.
+        shell: bash
+        run: |
+          PLUGIN=crates/sherpa-plugin/target/release/libminutes_sherpa.dylib
+          test -f "$PLUGIN" || { echo "::error::plugin not built"; exit 1; }
+          if nm -gU "$PLUGIN" | grep -q OrtGetApiBase; then
+            echo "::error::the plugin exports OrtGetApiBase and can interpose on the host"
+            exit 1
+          fi
+          echo "plugin exports no ONNX Runtime entry points"
+
+      - name: Build full workspace (macOS only)
+        if: runner.os == 'macOS'
+        run: cargo build --no-default-features
+
+      - name: Unit tests (no whisper)
+        # Keep libtest output visible on hosted Windows so a platform-only
+        # assertion is diagnosable even if a later test reaches the job
+        # deadline. Privacy-B also substantially expanded this suite; three
+        # minutes no longer covers its bounded two-worker/QMD regressions.
+        run: cargo test -p minutes-core --no-default-features --lib -- --test-threads=1 --nocapture
+        timeout-minutes: 15
+
+      - name: Unit tests (streaming feature)
+        # The step above runs with streaming off, so every #[cfg(test)] module
+        # inside a streaming-gated file was compiled by "Build core with
+        # streaming only" and then never executed. That covered the dual-source
+        # chunking invariants in streaming.rs and the mic-mute tests. Run the
+        # same suite once more with the feature on.
+        run: python scripts/test_coverage.py run streaming
+        timeout-minutes: 15
+
+      - name: Copilot attach, routing, and window-contract tests
+        # On Windows this executes the real named-pipe connect/reconnect path.
+        # On Unix it also asserts owner-only socket/discovery permissions.
+        run: "cargo test -p minutes-core --no-default-features --lib copilot:: -- --test-threads=1"
+        timeout-minutes: 4
+
+      - name: Copilot CLI contract tests
+        run: cargo test -p minutes-cli --no-default-features -- copilot --test-threads=1
+        timeout-minutes: 4
+
+      - name: CLI transcription renderer contracts
+        # Core attribution tests do not execute this independent CLI renderer.
+        # Exercise both formats, overlap/turn-crossing abstention, and absent
+        # evidence with deterministic injected results and no audio device.
+        run: cargo test -p minutes-cli --no-default-features -- transcribe_ --test-threads=1
+        timeout-minutes: 4
+
+      - name: CLI voice-enrollment contracts
+        run: cargo test -p minutes-cli --no-default-features -- enrollment_ --test-threads=1
+        timeout-minutes: 4
+
+      - name: CLI model-setup preferences
+        run: |
+          cargo test -p minutes-cli --no-default-features --bin minutes -- setup_ --test-threads=1
+          cargo test -p minutes-cli --no-default-features --test model_setup_preferences -- --test-threads=1
+        timeout-minutes: 4
+
+      - name: Diarization unit tests (cross-platform)
+        run: cargo test -p minutes-core --no-default-features --features diarize --lib -- diarize --test-threads=1
+        timeout-minutes: 3
+
+      # The desktop suite was compiled by `cargo check -p minutes-app --tests`
+      # but never executed, so a test that failed 100% of the time on macOS went
+      # unnoticed until #591. Several of these tests mutate process-global state
+      # (HOME, USERPROFILE) behind a local mutex, so run single-threaded rather
+      # than relying on every test remembering to take that guard.
+      # macOS only for now. The Tauri app ships for macOS and Windows and has
+      # no Linux desktop release, so Linux would pull the whole GTK/WebKit stack
+      # into CI for a target that never ships. Windows is excluded for a
+      # different reason: enabling this suite revealed 5 pre-existing failures
+      # there (path/HOME assumptions that only hold on Unix), tracked separately.
+      # Guarding macOS today is strictly better than guarding nothing, which is
+      # what this suite had before.
+      - name: Desktop app unit tests
+        if: runner.os == 'macOS'
+        run: cargo test -p minutes-app --no-default-features -- --test-threads=1
+        timeout-minutes: 10
+
+      - name: Integration tests (no whisper, macOS only)
+        if: runner.os == 'macOS'
+        run: cargo test -p minutes-core --no-default-features --test integration -- --test-threads=1
+        timeout-minutes: 10
+
+      - name: Upload executed feature-test inventory
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: feature-test-inventory-${{ runner.os }}
+          path: target/test-coverage/*.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Clippy (macOS only — full workspace)
+        if: runner.os == 'macOS'
+        run: |
+          cargo clippy --all --no-default-features -- -D warnings
+          cargo clippy -p minutes-core --no-default-features --features parakeet -- -D warnings
+
+      - name: Format check (macOS only)
+        if: runner.os == 'macOS'
+        run: cargo fmt --all -- --check
+
+      - name: Check desktop capture-relay integration (macOS)
+        if: runner.os == 'macOS'
+        run: cargo check -p minutes-app --tests
+
+      - name: Save cargo cache
+        # Only main saves. PRs restore main's entry and never write their own,
+        # which used to fill the 10 GB cache and evict main's entries within hours.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ steps.cargo-cache.outputs.cache-primary-key }}
+
+  install:
+    name: Install CLI (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install audio dev headers (Linux)
+        if: runner.os == 'Linux'
+        timeout-minutes: 20
+        run: .github/scripts/apt-install.sh libasound2-dev libpipewire-0.3-dev libspa-0.2-dev
+
+      # Per-image cache scope (ImageOS + ImageVersion); see the test job comment.
+      # These are runner-injected vars absent from the ${{ env }} context, so we
+      # expose the value as a step output for the cache key below.
+      - name: Resolve runner image for cache scope
+        id: runner-image
+        shell: bash
+        run: echo "scope=${ImageOS:-noimage}-${ImageVersion:-noversion}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cargo cache
+        id: cargo-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ steps.runner-image.outputs.scope }}-install-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: cargo install minutes-cli (no whisper)
+        run: cargo install --path crates/cli --no-default-features
+
+      - name: Verify minutes --help
+        run: minutes --help
+
+      - name: Verify minutes --version
+        run: minutes --version
+
+      - name: Save cargo cache
+        # Only main saves. PRs restore main's entry and never write their own,
+        # which used to fill the 10 GB cache and evict main's entries within hours.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ steps.cargo-cache.outputs.cache-primary-key }}
+
+  linux_full_build:
+    # Catches whisper+Linux regressions at PR time instead of waiting for the
+    # release-cli.yml workflow at tag push. Builds the CLI with default features
+    # (whisper + diarize) so any libclang / cmake / pipewire-sys / whisper-rs
+    # breakage on Linux surfaces here.
+    #
+    # Uses a debug build (not --release) because optimization-only failures in
+    # whisper.cpp / ort / pyannote-rs are vanishingly rare and the time savings
+    # (~5 min vs ~15 min cold) compound across every PR. release-cli.yml still
+    # does the release build at tag time as the final gate.
+    #
+    # Deliberately uncached. Its 1.2 GB entry pushed main's caches past the
+    # repository's 10 GB limit, and a cold debug build still finishes long
+    # before the Windows test job, which sets the wall-clock time.
+    name: Build CLI (ubuntu-latest, default features)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux build + audio dev deps
+        # ubuntu-latest happens to ship clang preinstalled, but we declare it
+        # explicitly so this job stays portable to other Linux runner images.
+        timeout-minutes: 20
+        run: |
+          .github/scripts/apt-install.sh \
+            clang libclang-dev \
+            cmake build-essential pkg-config \
+            libasound2-dev libpipewire-0.3-dev libspa-0.2-dev
+
+      - name: Install Linux desktop check deps
+        timeout-minutes: 20
+        run: |
+          .github/scripts/apt-install.sh \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Build CLI debug (whisper + diarize)
+        run: cargo build -p minutes-cli
+
+      - name: Verify binary runs
+        run: ./target/debug/minutes --version
+
+      - name: Check Linux desktop capture-relay + window contract
+        run: cargo check -p minutes-app --tests
+
+  desktop_windows:
+    name: Desktop App Installer (windows-latest)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # Per-image cache scope (ImageOS + ImageVersion); see the test job comment.
+      # These are runner-injected vars absent from the ${{ env }} context, so we
+      # expose the value as a step output for the two cache keys below.
+      - name: Resolve runner image for cache scope
+        id: runner-image
+        shell: bash
+        run: echo "scope=${ImageOS:-noimage}-${ImageVersion:-noversion}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cargo cache
+        id: cargo-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ steps.runner-image.outputs.scope }}-desktop-noincr-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Clean stale Windows native build cache
+        shell: bash
+        run: |
+          rm -rf \
+            target/debug/build/whisper-rs-sys-* \
+            target/release/build/whisper-rs-sys-* \
+            target/debug/build/knf-rs-sys-* \
+            target/release/build/knf-rs-sys-*
+
+      - name: Restore ONNX Runtime binaries cache
+        id: ort-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/AppData/Local/dfbin
+          key: ${{ runner.os }}-${{ steps.runner-image.outputs.scope }}-ort-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Tauri CLI
+        shell: bash
+        run: .github/scripts/install-tauri-cli.sh 2.10.1
+
+      - name: Configure portable Windows CPU baseline
+        shell: bash
+        run: .github/scripts/export-windows-cpu-baseline.sh
+
+      - name: Check Windows desktop capture-relay + window contract
+        # Compiles Tauri's owner side against the Windows named-pipe relay
+        # before the slower installer build.
+        run: cargo check -p minutes-app --tests
+
+      - name: Build Windows NSIS installer (unsigned)
+        working-directory: tauri/src-tauri
+        run: cargo tauri build --ci --bundles nsis --no-sign
+        env:
+          CARGO_NET_RETRY: 3
+
+      - name: The desktop binary must not outgrow its packaged runtime (#657)
+        # release-windows-desktop.yml refuses to zip a desktop build whose
+        # runtime DLLs build.rs did not stage, and release-cli.yml refuses an
+        # archive missing a DLL the binary actually imports. Both live only in
+        # tag-triggered workflows, so the condition they guard is first
+        # observed during a release. #657 is what that looks like when it gets
+        # out, and #733 was the same shape reaching a different artifact.
+        #
+        # Asserted here instead, on the Windows build the pull request already
+        # pays for.
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # build.rs must have staged the runtime beside the crate; the release
+          # zip copies exactly these.
+          $staged = Get-ChildItem 'tauri/src-tauri/vcruntime140*.dll','tauri/src-tauri/msvcp140*.dll' -ErrorAction SilentlyContinue
+          if (-not $staged) {
+            throw 'build.rs staged no runtime DLLs; a release would ship a desktop build that cannot start (#657)'
+          }
+          Write-Host "staged: $(($staged | ForEach-Object { $_.Name }) -join ', ')"
+
+          # And the binary must not import a runtime DLL that is not staged.
+          # Read from the import table rather than a fixed list, because the
+          # failure mode is a dependency adding an import such as MSVCP140_2.dll
+          # (C++17 special math) that nobody thought to package.
+          $exe = 'target/release/minutes-app.exe'
+          if (-not (Test-Path $exe)) { throw "expected $exe from the bundle build" }
+          $dumpbin = Get-ChildItem 'C:\Program Files*\Microsoft Visual Studio\*\*\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $dumpbin) { throw 'dumpbin.exe not found; cannot verify the import table' }
+          $imports = & $dumpbin.FullName /dependents $exe |
+                     Select-String -Pattern '^\s+(\S+\.dll)$' |
+                     ForEach-Object { $_.Matches[0].Groups[1].Value }
+          $needed = $imports | Where-Object { $_ -match '^(vcruntime|msvcp|concrt)' }
+          if (-not $needed) { throw 'no VC runtime imports detected; the import scan is probably broken' }
+          Write-Host "runtime imports: $($needed -join ', ')"
+          $stagedNames = $staged | ForEach-Object { $_.Name }
+
+          # Negative control. dumpbin reports MSVCP140.dll while build.rs
+          # stages msvcp140.dll, so this comparison only works because
+          # -notcontains is case-insensitive, and it has never been observed
+          # rejecting anything. Proving it can fail costs three lines and is
+          # the difference between a check and a decoration.
+          $control = @('MSVCP140.dll', 'definitely-not-staged.dll') |
+                     Where-Object { $stagedNames -notcontains $_ }
+          if ($control -ne 'definitely-not-staged.dll') {
+            throw "the import comparison is broken: it flagged '$control' instead of the one absent DLL"
+          }
+
+          $missing = $needed | Where-Object { $stagedNames -notcontains $_ }
+          if ($missing) {
+            throw "minutes-app.exe imports runtime DLLs that are not staged: $($missing -join ', '). Add them to RUNTIME_DLLS in tauri/src-tauri/build.rs and to the release packaging lists (#657)."
+          }
+          Write-Host 'every runtime import is staged for packaging'
+
+      - name: Save cargo cache
+        # Only main saves. PRs restore main's entry and never write their own,
+        # which used to fill the 10 GB cache and evict main's entries within hours.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ steps.cargo-cache.outputs.cache-primary-key }}
+
+      - name: Save ONNX Runtime binaries cache
+        # Only main saves. PRs restore main's entry and never write their own,
+        # which used to fill the 10 GB cache and evict main's entries within hours.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.ort-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/AppData/Local/dfbin
+          key: ${{ steps.ort-cache.outputs.cache-primary-key }}
+
+  mcp:
+    name: MCP Server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Install Rust for process-level MCP contracts
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install audio headers for the model-free CLI
+        timeout-minutes: 20
+        run: .github/scripts/apt-install.sh libasound2-dev libpipewire-0.3-dev libspa-0.2-dev
+
+      - name: Cache MCP contract CLI build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: mcp-process-contracts
+
+      - name: Build actual CLI for process-level MCP contracts
+        run: cargo build -p minutes-cli --no-default-features
+        timeout-minutes: 15
+
+      - name: Install and build SDK, then install MCP dependencies
+        # The SDK suite also runs when MCP deliberately pins a different
+        # published SDK version, so install its own dependencies explicitly.
+        run: |
+          npm --prefix crates/sdk ci
+          npm --prefix crates/sdk run build
+          node scripts/install_mcp_dependencies.mjs --sdk-ready
+
+      - name: Test memory evaluation metrics and harness
+        run: python3 -m unittest discover -s tests/eval/v02 -p 'test_*.py' -v
+
+      - name: SDK full unit suite
+        run: node scripts/run_corpus_test_harness.mjs npm --prefix crates/sdk test
+        timeout-minutes: 10
+
+      - name: TypeScript check
+        working-directory: crates/mcp
+        run: npx tsc --noEmit
+
+      - name: MCP capture-relay attach tests
+        working-directory: crates/mcp
+        run: npx vitest run src/captureRelay.test.ts
+
+      - name: MCP full unit suite
+        working-directory: crates/mcp
+        run: npm run test:unit
+
+      # Regression guard for issue #149: v0.13.0 shipped an MCPB bundle
+      # that Claude Desktop 1.3109.0 refused to unzip because the bundle
+      # contained Next.js chunks with `..` in their filenames. Pack the
+      # bundle on every push, run the static bundle check (forbidden
+      # prefixes, `..` paths, required runtime files), and smoke-test the
+      # handshake. This class of regression now fails CI before a release
+      # can ship it.
+
+      - name: Build MCP server
+        working-directory: crates/mcp
+        run: npm run build
+
+      - name: MCP process, transport and first-recall integration contracts
+        working-directory: crates/mcp
+        env:
+          MINUTES_MCP_AUTO_SETUP: '0'
+        run: node ../../scripts/run_corpus_test_harness.mjs npm run test:integration
+        timeout-minutes: 10
+
+      - name: Evaluate memory contracts through actual MCP stdio
+        # Public deterministic fixtures are a conformance gate, not a
+        # production-quality or state-of-the-art benchmark claim.
+        run: python3 tests/eval/v02/mcp_eval.py --cli target/debug/minutes --sizes 100 --repeats 1 --output tests/eval/results/mcp-v02.json
+        timeout-minutes: 10
+
+      - name: Upload memory conformance report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: memory-conformance-mcp
+          path: tests/eval/results/mcp-v02.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Install mcpb CLI
+        run: npm install -g @anthropic-ai/mcpb
+
+      - name: Pack MCPB bundle
+        run: ./scripts/pack_mcpb.sh minutes.mcpb
+
+      - name: Static bundle check
+        run: ./scripts/check_mcpb_bundle.sh minutes.mcpb
+
+      - name: Handshake smoke test
+        run: ./scripts/smoke_mcpb_handshake.sh minutes.mcpb
+
+  desktop_recall:
+    name: Desktop Recall Contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Install SDK toolchain for typed Recall boundary
+        run: npm --prefix crates/sdk ci
+
+      - name: Check generated Recall contract and typed decoder
+        run: |
+          node scripts/check_recall_chunk_contract.mjs
+          node crates/sdk/node_modules/typescript/bin/tsc -p tauri/tsconfig.recall.json
+
+      - name: Install pinned browser harness
+        run: |
+          node -e "require('node:fs').mkdirSync('target/recall-browser', { recursive: true }); require('node:fs').writeFileSync('target/recall-browser/package.json', JSON.stringify({ private: true }))"
+          npm --prefix target/recall-browser install --no-save --package-lock=false --no-audit --no-fund playwright@1.62.1
+          node target/recall-browser/node_modules/playwright/cli.js install --with-deps chromium --only-shell
+        timeout-minutes: 10
+
+      - name: Test Recall in Chromium with the production DOM and renderer
+        # Tauri IPC is stubbed; native permissions and capture remain a
+        # separate signed-desktop acceptance gate.
+        env:
+          MINUTES_DESKTOP_SCREENSHOT: target/desktop-contracts/recall.png
+        run: node scripts/desktop/recall-rendered.test.mjs
+        timeout-minutes: 5
+
+      - name: Upload rendered Recall evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-recall-rendered
+          path: target/desktop-contracts/recall.png
+          if-no-files-found: warn
+          retention-days: 14
+
+  # The lockfile is generated from a clean tree with Node 22/npm 10 so its v3
+  # package graph retains every platform-specific optional dependency.
+  mcp_lockfile_check:
+    name: Agent Corpus + MCP Lockfile (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Install SDK dependencies
+        working-directory: crates/sdk
+        run: npm ci
+
+      - name: SDK corpus policy tests
+        working-directory: crates/sdk
+        env:
+          NODE_ENV: test
+          MINUTES_TEST_HARNESS: '1'
+          MINUTES_CORPUS_AUTH_TIMEOUT_MS: '60000'
+        run: npx vitest run src/corpus-lease.test.ts src/secure-read.test.ts
+
+      - name: Build SDK production module
+        working-directory: crates/sdk
+        run: npm run build
+
+      - name: Gate SDK production recursive watcher protocol
+        run: node scripts/check_corpus_watch_fence.mjs crates/sdk/dist/corpus-lease.js
+
+      - name: Install MCP dependencies
+        run: node scripts/install_mcp_dependencies.mjs --sdk-ready
+
+      - name: TypeScript check
+        working-directory: crates/mcp
+        run: npx tsc --noEmit
+
+      - name: MCP corpus policy tests
+        working-directory: crates/mcp
+        env:
+          NODE_ENV: test
+          MINUTES_TEST_HARNESS: '1'
+          MINUTES_CORPUS_AUTH_TIMEOUT_MS: '60000'
+        run: >-
+          npx vitest run
+          src/index.test.ts
+          src/corpus-lease.test.ts
+          src/secure-read.test.ts
+          src/paths.test.ts
+
+      - name: Build MCP production module
+        working-directory: crates/mcp
+        run: npm run build
+
+      - name: Gate MCP production recursive watcher protocol
+        run: node scripts/check_corpus_watch_fence.mjs crates/mcp/dist/corpus-lease.js
+
+  version_sync:
+    name: Version Sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Verify version policy
+        run: node scripts/check_version_sync.mjs
+
+      - name: Validate MCP Registry server metadata
+        run: node scripts/validate_server_json.mjs
+
+      - name: Verify corpus lease mirror
+        run: node scripts/check_corpus_lease_mirror.mjs
+
+      - name: Verify CI rust filter covers every workspace member
+        run: node scripts/check_ci_rust_filter.mjs
+
+      - name: Test version policy checker
+        run: node --test scripts/check_version_sync.test.mjs
+
+      - name: Test optional Git hook setup
+        run: node --test scripts/setup_hooks.test.mjs
+
+      - name: Test CI rust filter guard
+        run: node --test scripts/check_ci_rust_filter.test.mjs
+
+      - name: Install workflow parser for feature-test coverage audit
+        run: python -m pip install --quiet pyyaml
+
+      - name: Verify executing feature-test coverage and negative controls
+        run: |
+          python scripts/test_test_coverage.py
+          python scripts/test_coverage.py check
+
+      - name: Test local and published SDK install policies
+        run: node --test scripts/install_mcp_dependencies.test.mjs
+
+      - name: Test Windows CPU-baseline release guard
+        run: node --test scripts/check_windows_cpu_baseline.test.mjs
+
+      - name: Test transactional version bump
+        run: node --test scripts/bump_version.test.mjs
+
+      - name: Test committed release flow
+        run: node --test scripts/release.test.mjs
+
+      - name: Test site release constant sync modes
+        run: node --test scripts/sync_site_release_version.test.mjs
+
+  design_tokens:
+    name: Design Tokens
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Fetch pull request base baseline
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          if git cat-file -e "$BASE_SHA:design/token-baseline.json"; then
+            git show "$BASE_SHA:design/token-baseline.json" > "$RUNNER_TEMP/design-token-base.json"
+            echo "DESIGN_TOKEN_BASELINE=$RUNNER_TEMP/design-token-base.json" >> "$GITHUB_ENV"
+          fi
+
+      - name: Verify design-token policy
+        shell: bash
+        run: |
+          if [[ -n "${DESIGN_TOKEN_BASELINE:-}" ]]; then
+            node scripts/check_design_tokens.mjs --base-baseline "$DESIGN_TOKEN_BASELINE"
+          else
+            node scripts/check_design_tokens.mjs
+          fi
+
+      # Nothing links the backend's chunk tags to the panel's dispatch, so a
+      # provider can stream correctly while the UI discards every chunk. That
+      # shipped for months on the Ollama path (#650).
+      - name: Verify Recall chat chunk contract
+        run: node scripts/check_recall_chunk_contract.mjs
+
+      - name: Verify Recall terminal input privacy contract
+        run: node --test scripts/check_recall_terminal_input_contract.test.mjs
+
+      - name: Verify meeting draft editing and source preservation
+        run: node --test scripts/test_meeting_drafts.mjs
+
+      - name: Test design-token checker
+        run: node --test scripts/check_design_tokens.test.mjs
+
+      - name: Test stored update offer restoration
+        run: node scripts/test_update_offer.mjs
+
+      - name: Test shipped dictation controllers
+        run: |
+          node scripts/test_dictation_readiness.mjs
+          node scripts/test_model_setup.mjs
+          node --test scripts/test_recording_audio.mjs
+          node scripts/test_dictation_overlay.mjs
+          node scripts/test_dictation_history.mjs
+
+  skills_compiler:
+    name: Skills Compiler
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Install skill compiler dependencies
+        working-directory: tooling/skills
+        run: npm ci
+
+      - name: Verify canonical skills and generated mirrors
+        working-directory: tooling/skills
+        run: npm run ci
+
+  site_release_consistency:
+    name: Site Release Link Consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Verify site release constants match manifest
+        run: node scripts/sync_site_release_version.mjs --check
+
+  site_build:
+    name: Site Build
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install site dependencies
+        working-directory: site
+        run: npm ci
+
+      # `next build` type-checks as part of the build (no ignoreBuildErrors in
+      # next.config), so this covers both compilation and types in one step.
+      - name: Build the site
+        working-directory: site
+        run: npm run build
+
+  agents_sync:
+    name: Agents Skill Sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify .agents/ mirrors .claude/plugins/minutes/
+        run: ./scripts/check-agents-sync.sh
+
+  llms_sync:
+    name: Agent Docs (llms.txt) Consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Verify llms.txt and related agent docs are in sync with sources
+        run: node scripts/generate_llms_txt.mjs --check
+
+  live_sidekick_eval:
+    name: Live Sidekick Privacy and Behavior Evals
+    # Intentionally independent of the Rust path filter. A fixture-, schema-,
+    # privacy-, or runner-only PR must not be able to skip this gate.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install workflow-guard dependencies
+        run: python3 -m pip install --quiet pyyaml
+
+      # Repository-scoped signing secrets are readable by any job that names
+      # them, and they cannot be migrated to environment scope: GitHub secrets
+      # are write-only and the source material is not recoverable, so deleting
+      # the repository copies would be irreversible. The approval gate is
+      # enforced here instead.
+      - name: Signing secrets stay behind an approved environment gate
+        run: python3 scripts/check_signing_secret_scope.py
+
+      - name: Signing secret scope negative controls
+        run: python3 -m unittest tests/eval/test_signing_secret_scope.py
+
+      - name: Public fixture privacy gate
+        run: python3 scripts/check_live_sidekick_fixture_privacy.py
+
+      - name: Privacy and schema negative controls
+        run: >-
+          python3 -m unittest
+          tests/eval/test_live_sidekick_fixture_privacy.py
+          tests/eval/test_live_sidekick_fixture_schema.py
+
+      - name: Validate versioned fixture schema and execution classifications
+        run: python3 tests/eval/live_sidekick_fixture_schema.py
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install and build canonical skill router
+        working-directory: tooling/skills
+        run: |
+          npm ci
+          npm run build
+
+      - name: Replay routing fixture twice through canonical router
+        run: node tests/eval/live_sidekick_routing_eval.mjs
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install audio dev headers (Linux)
+        timeout-minutes: 20
+        run: .github/scripts/apt-install.sh libasound2-dev libpipewire-0.3-dev libspa-0.2-dev
+
+      - name: Replay executable fixtures twice through actual core reducer
+        run: cargo test -p minutes-core --no-default-features --test live_sidekick_eval -- --test-threads=1
+        timeout-minutes: 8
+
+  # Single aggregator gate, intended to be the ONLY required status check in
+  # branch protection. The Rust matrix jobs (test / install / linux_full_build /
+  # desktop_windows) are gated by `needs.changes.outputs.rust == 'true'`, so on a
+  # docs/site/MCP-only PR they are SKIPPED. GitHub treats a required-but-skipped
+  # check as unmet, which left non-Rust PRs permanently BLOCKED (an outside
+  # contributor could not merge them at all; the maintainer had to admin-merge).
+  #
+  # This job depends on every job whose check used to be individually required,
+  # runs with `if: always()`, and fails only if one of them actually FAILED or
+  # was CANCELLED. A `skipped` result (the path filter doing its job) passes the
+  # gate. So: required Rust jobs that ran must be green; required jobs the filter
+  # correctly skipped do not block. Point branch protection at "CI Gate" alone.
+  sherpa_macos_packaging:
+    name: Sherpa relocation (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/sherpa-plugin -> target
+      - name: Build both client generations and verify relocated signed plugins
+        shell: bash
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+        run: |
+          set -euo pipefail
+          CXXFLAGS="-I$(xcrun --show-sdk-path)/usr/include/c++/v1"
+          export CXXFLAGS
+          (cd crates/sherpa-plugin && cargo build --release --locked)
+          (cd crates/sherpa-plugin && cargo build --release --locked --features legacy-static --target-dir target/legacy-static)
+          relocated="$RUNNER_TEMP/sherpa-relocated"
+          mkdir -p "$relocated/shared" "$relocated/legacy"
+          for lib in libminutes_sherpa.dylib libsherpa-onnx-c-api.dylib libonnxruntime.dylib; do
+            cp -f "crates/sherpa-plugin/target/release/$lib" "$relocated/shared/$lib"
+            codesign --force --options runtime --sign - "$relocated/shared/$lib"
+            codesign --verify --strict "$relocated/shared/$lib"
+          done
+          cp -f crates/sherpa-plugin/target/legacy-static/release/libminutes_sherpa.dylib "$relocated/legacy/"
+          codesign --force --options runtime --sign - "$relocated/legacy/libminutes_sherpa.dylib"
+          for layout in shared legacy; do
+            (cd /tmp && python3 "$GITHUB_WORKSPACE/scripts/verify_sherpa_plugin_loads.py" "$relocated/$layout/libminutes_sherpa.dylib")
+          done
+
+  ci_gate:
+    name: CI Gate
+    needs:
+      - changes
+      - sherpa_macos_packaging
+      - test
+      - install
+      - linux_full_build
+      - desktop_windows
+      - mcp
+      - mcp_lockfile_check
+      - version_sync
+      - design_tokens
+      - skills_compiler
+      - agents_sync
+      - site_release_consistency
+      - site_build
+      - llms_sync
+      - live_sidekick_eval
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any required job failed or was cancelled
+        if: >-
+          contains(needs.*.result, 'failure') ||
+          contains(needs.*.result, 'cancelled')
+        run: |
+          echo "Upstream job results: ${{ join(needs.*.result, ', ') }}"
+          echo "A required CI job failed or was cancelled."
+          exit 1
+
+      - name: Report success
+        run: |
+          echo "All required CI jobs passed or were legitimately skipped."
+          echo "Upstream job results: ${{ join(needs.*.result, ', ') }}"

@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dictation</title>
+  <script src="scripts/ui-zoom.js"></script>
+  <script src="locales/zh-CN.js"></script>
+  <script src="locales/pt-BR.js"></script>
+  <script src="scripts/i18n.js"></script>
+  <link rel="stylesheet" href="styles/ui-zoom-tokens.css">
+  <style>
+    @font-face {
+      font-family: 'Geist';
+      font-style: normal;
+      font-weight: 400;
+      src: url('fonts/Geist-Regular.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'Geist';
+      font-style: normal;
+      font-weight: 500;
+      src: url('fonts/Geist-Medium.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'Geist Mono';
+      font-style: normal;
+      font-weight: 400;
+      src: url('fonts/GeistMono-Regular.woff2') format('woff2');
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      color-scheme: light dark;
+      --bg-hover:       #1C1C1A;
+      --border:         rgba(255, 255, 255, 0.06);
+      --border-mid:     #2A2924;
+      --text:       #E8E4DA;
+      --text-secondary: #6B6760;
+      --text-tertiary:  #3D3B38;
+      --accent:     #30D158;
+      --capture:    #62BCE9;
+      --capture-surface: #28231F;
+      --capture-edge: rgba(229, 201, 174, 0.14);
+      --capture-control: #C1AC96;
+      --capture-meter: #E5BC98;
+      --capture-ring: rgba(98, 188, 233, 0.16);
+      --red:        #FF453A;
+      --green:      #30D158;
+      --red-border-strong: rgba(255, 69, 58, 0.45);
+      --green-ring: rgba(48, 209, 88, 0.18);
+      --green-glow: rgba(48, 209, 88, 0.28);
+      --accent-ring: rgba(48, 209, 88, 0.18);
+      --accent-glow: rgba(48, 209, 88, 0.28);
+      --spinner-track: rgba(48, 209, 88, 0.18);
+      --waveform-top: rgba(255,255,255,0.85);
+      --waveform-bottom: rgba(255,255,255,0.42);
+      --shadow:
+        0 14px 28px rgba(0, 0, 0, 0.35),
+        0 4px 10px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg-hover:       #E8E2D8;
+        --border:         rgba(0, 0, 0, 0.07);
+        --border-mid:     rgba(0, 0, 0, 0.13);
+        --text:           #1A1916;
+        --text-secondary: #8C8880;
+        --text-tertiary:  #BDB9B0;
+        --accent:         #C96B4E;
+        --capture:        #2F6F8F;
+        --capture-surface: #EFE6D8;
+        --capture-edge: rgba(113, 79, 52, 0.16);
+        --capture-control: #756351;
+        --capture-meter: #9A6240;
+        --capture-ring:   rgba(47, 111, 143, 0.13);
+        --red:            #C0392B;
+        --green:          #2E7D46;
+        --red-border-strong: rgba(192, 57, 43, 0.32);
+        --green-ring: rgba(46, 125, 70, 0.14);
+        --green-glow: rgba(46, 125, 70, 0.20);
+        --accent-ring: rgba(201, 107, 78, 0.14);
+        --accent-glow: rgba(201, 107, 78, 0.20);
+        --spinner-track: rgba(201, 107, 78, 0.14);
+        --waveform-top: rgba(26, 25, 22, 0.70);
+        --waveform-bottom: rgba(26, 25, 22, 0.28);
+        --shadow:
+          0 14px 28px rgba(0, 0, 0, 0.12),
+          0 4px 10px rgba(0, 0, 0, 0.08),
+          inset 0 1px 0 rgba(0, 0, 0, 0.03);
+      }
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+    }
+
+    body {
+      font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: transparent;
+      overflow: hidden;
+      -webkit-user-select: none;
+      user-select: none;
+      display: flex;
+      align-items: flex-end;
+    }
+
+    .pill {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 3rem;
+      background-color: var(--capture-surface);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cg fill='%23B99776' fill-opacity='.035'%3E%3Cpath d='M1 1h1v1H1zM10 2h1v1H10zM5 5h1v1H5zM14 7h1v1H14zM2 10h1v1H2zM9 9h1v1H9zM6 14h1v1H6zM13 13h1v1H13z'/%3E%3C/g%3E%3C/svg%3E");
+      border: 1px solid var(--capture-edge);
+      border-radius: 1.25rem;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+      animation: appear 200ms ease-out;
+      transition: border-color 160ms ease, box-shadow 160ms ease;
+      overflow: hidden;
+      position: relative;
+      cursor: grab;
+    }
+
+    .pill.expanded {
+      height: 5.5rem;
+    }
+
+    .pill.error {
+      border-color: var(--red-border-strong);
+      box-shadow:
+        0 14px 28px rgba(0, 0, 0, 0.18),
+        0 4px 10px rgba(0, 0, 0, 0.14);
+    }
+
+    .pill.dismissing {
+      animation: dismiss 150ms ease-out forwards;
+    }
+
+    @keyframes appear {
+      from { opacity: 0; transform: translateY(10px) scale(0.985); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes dismiss {
+      from { opacity: 1; transform: translateY(0) scale(1); }
+      to   { opacity: 0; transform: translateY(12px) scale(0.985); }
+    }
+
+    /* Status row */
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 0.875rem;
+      flex-shrink: 0;
+      min-height: 2.875rem;
+    }
+
+    /* Status dot */
+    .dot {
+      width: 0.625rem;
+      height: 0.625rem;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--text-secondary);
+      opacity: 0.65;
+      box-shadow: none;
+    }
+
+    .dot.capture {
+      background: var(--capture);
+      opacity: 1;
+      box-shadow: 0 0 0 2px var(--capture-ring);
+    }
+
+    .dot.blink {
+      animation: pulse 1.8s ease-in-out infinite;
+    }
+
+    .dot.green {
+      background: var(--green);
+      box-shadow:
+        0 0 0 4px var(--green-ring),
+        0 0 16px var(--green-glow);
+    }
+    .dot.accent {
+      background: var(--accent);
+      box-shadow:
+        0 0 0 4px var(--accent-ring),
+        0 0 16px var(--accent-glow);
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(0.86); opacity: 0.62; }
+    }
+
+    /* Spinner */
+    .spinner {
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid var(--spinner-track);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1.0s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Label */
+    .label {
+      font-size: var(--text-base);
+      font-weight: 600;
+      letter-spacing: 0;
+      color: var(--text);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: opacity 180ms ease, transform 180ms ease, filter 180ms ease;
+    }
+
+    /* Timer */
+    .timer {
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+      letter-spacing: 0;
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .recovery-button {
+      appearance: none;
+      border: 1px solid var(--accent-ring);
+      border-radius: 999px;
+      background: var(--accent-ring);
+      color: var(--text);
+      cursor: pointer;
+      flex-shrink: 0;
+      font: 600 var(--text-sm) 'Geist', sans-serif;
+      padding: 0.32rem 0.7rem;
+    }
+
+    .recovery-button:hover {
+      background: var(--accent-glow);
+    }
+
+    .recovery-button:disabled {
+      cursor: default;
+      opacity: 0.55;
+    }
+
+    .recovery-button.hidden {
+      display: none;
+    }
+
+    /* Waveform */
+    .waveform {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      height: 1rem;
+      flex-shrink: 0;
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .waveform .bar {
+      width: 3px;
+      height: 16px;
+      background: linear-gradient(180deg, var(--waveform-top), var(--waveform-bottom));
+      border-radius: 999px;
+      transform: scaleY(0.25);
+      transform-origin: center;
+      transition: transform 120ms ease, opacity 120ms ease;
+      opacity: 0.75;
+    }
+
+    .waveform.processing .bar {
+      animation: quietPulse 900ms ease-in-out infinite;
+      opacity: 0.55;
+    }
+
+    @keyframes quietPulse {
+      0%, 100% { transform: scaleY(0.375); opacity: 0.42; }
+      50% { transform: scaleY(0.75); opacity: 0.72; }
+    }
+
+    .soft-swap {
+      opacity: 0.4;
+      transform: translateY(2px);
+      filter: blur(0.4px);
+    }
+
+    /* Text row */
+    .text-row {
+      padding: 0 14px 10px 14px;
+      border-top: 1px solid var(--border);
+      margin-top: -2px;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 150ms ease;
+    }
+
+    .text-row.visible {
+      opacity: 1;
+    }
+
+    .text-content {
+      font-size: var(--text-body);
+      font-weight: 400;
+      color: var(--text);
+      line-height: 1.35;
+      max-height: 2.7em;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      padding-top: 8px;
+      white-space: pre-line;
+    }
+
+    .text-content.placeholder {
+      color: var(--text-tertiary);
+    }
+
+    /* Silence countdown bar */
+    .silence-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: var(--accent);
+      opacity: 0.3;
+      border-radius: 0 0 20px 20px;
+      transform-origin: left center;
+      transition: none;
+    }
+
+    .silence-bar.hidden {
+      display: none;
+    }
+
+    /* Error icon */
+    .error-icon {
+      font-size: var(--text-base);
+      color: var(--red);
+      flex-shrink: 0;
+    }
+
+    /* Success icon */
+    .success-icon {
+      font-size: var(--text-base);
+      color: var(--green);
+      flex-shrink: 0;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+
+      .pill,
+      .pill.dismissing,
+      .dot.blink,
+      .spinner,
+      .waveform,
+      .waveform .bar,
+      .waveform.processing .bar,
+      .label,
+      .timer,
+      .text-row,
+      .silence-bar,
+      .soft-swap {
+        animation: none !important;
+        transition: none !important;
+        transform: none !important;
+        filter: none !important;
+      }
+
+      .waveform .bar {
+        transform: scaleY(0.35) !important;
+      }
+    }
+    .capture-controls { display: flex; gap: 4px; margin-left: auto; flex-shrink: 0; }
+    .capture-controls.hidden, .capture-controls button.hidden { display: none; }
+    .pill.compact {
+      width: 12rem;
+      height: 2.5rem;
+      margin: 0 auto;
+      border-radius: 1.25rem;
+      background-color: var(--capture-surface);
+
+      border-color: var(--capture-edge);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+    }
+    .pill.compact .status-row { padding: 0.375rem 0.625rem; min-height: 2.5rem; gap: 0.5rem; }
+    .pill.compact #indicator, .pill.compact .timer, .pill.compact .label { display: none !important; }
+    .pill.compact.capture-warning { width: 100%; }
+    .pill.compact.capture-warning .label { display: block !important; font-size: var(--text-body); }
+    .pill.capturing .waveform { flex: 1; justify-content: center; }
+    .pill.capturing .waveform .bar { background: var(--capture-meter); border-radius: 1px; opacity: 1; }
+    .pill.capturing .waveform .bar:nth-child(3n + 1) { opacity: 0.72; }
+    .pill.capturing .waveform .bar:nth-child(3n + 2) { opacity: 0.88; }
+    .capture-controls .recovery-button {
+      width: 1.75rem; height: 1.75rem; padding: 0; display: grid; place-items: center;
+      border: 0; background: transparent; color: var(--capture-control);
+    }
+    .capture-controls .recovery-button:hover { background: var(--border); color: var(--text); }
+    .capture-controls svg { width: 1rem; height: 1rem; pointer-events: none; }
+    .capture-controls button:focus-visible { outline: 2px solid var(--capture); outline-offset: 2px; }
+    .status-row:has(.capture-controls:not(.hidden)) { gap: 6px; }
+    .status-row:has(.capture-controls:not(.hidden)) .waveform { gap: 2px; }
+    /* Quiet activity is separate from measured microphone bars. The same
+       element survives startup, final decode and insertion without restarting. */
+    .busy-mark { display: none; justify-content: center; align-items: center; gap: 4px; flex: 1; height: 1rem; }
+    .pill.busy .busy-mark { display: flex; }
+    .busy-mark span { width: 3px; height: 3px; border-radius: 50%; background: var(--capture-meter); animation: quietActivity 1200ms ease-in-out infinite; }
+    .busy-mark span:nth-child(2) { animation-delay: 120ms; }
+    .busy-mark span:nth-child(3) { animation-delay: 240ms; }
+    @keyframes quietActivity { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.9; } }
+    .clipboard-button { display: none; color: var(--capture-control); background: transparent; border: 0; border-radius: 8px; width: 28px; height: 28px; cursor: pointer; flex-shrink: 0; }
+    .clipboard-button svg { width: 18px; height: 18px; pointer-events: none; }
+    .pill.clipboard .clipboard-button { display: grid; place-items: center; }
+    .pill.compact.clipboard .status-row { justify-content: center; }
+    .clipboard-button:hover { background: var(--border); }
+    .clipboard-button:focus-visible { outline: 2px solid var(--capture-meter); outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <div class="pill compact busy" id="pill" role="group" aria-label="Dictation status. Drag to move.">
+    <div class="status-row" id="status-row">
+      <div class="dot" id="indicator"></div>
+      <span class="label" id="label"></span>
+      <div class="busy-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+      <button class="clipboard-button" id="clipboard-button" type="button" aria-label="Copied to clipboard. Show text" title="Copied to clipboard · click to see text"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1h-2"/><rect x="7" y="2" width="6" height="4" rx="1"/><path d="M7 10h6M7 13h4"/></svg></button>
+      <button class="recovery-button hidden" id="download-button" type="button">Download</button>
+      <button class="recovery-button hidden" id="reprocess-button" type="button">Recover text</button>
+      <button class="recovery-button hidden" id="permission-button" type="button">Open Settings</button>
+      <div class="waveform" id="waveform" style="display:none">
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+      </div>
+      <span class="timer" id="timer" style="display:none">0:00</span>
+      <div class="capture-controls hidden" id="capture-controls"><button id="finish-button" class="recovery-button" type="button" aria-label="Finish dictation" title="Finish dictation"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg></button><button id="cancel-button" class="recovery-button" type="button" aria-label="Cancel dictation without inserting" title="Cancel dictation"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg></button></div>
+    </div>
+    <div class="text-row" id="text-row">
+      <div class="text-content placeholder" id="text-content">...</div>
+    </div>
+    <div class="silence-bar hidden" id="silence-bar"></div>
+  </div>
+  <div class="sr-only" id="announcement" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <script>
+    const { listen } = window.__TAURI__.event;
+
+    const pill = document.getElementById('pill');
+    const indicator = document.getElementById('indicator');
+    const label = document.getElementById('label');
+    const clipboardButton = document.getElementById('clipboard-button');
+    const downloadButton = document.getElementById('download-button');
+    const reprocessButton = document.getElementById('reprocess-button');
+    const permissionButton = document.getElementById('permission-button');
+    const waveform = document.getElementById('waveform');
+    const timer = document.getElementById('timer');
+    const captureControls = document.getElementById('capture-controls');
+    const finishButton = document.getElementById('finish-button');
+    const cancelButton = document.getElementById('cancel-button');
+    const textRow = document.getElementById('text-row');
+    const textContent = document.getElementById('text-content');
+    const silenceBar = document.getElementById('silence-bar');
+    const announcement = document.getElementById('announcement');
+    const bars = waveform.querySelectorAll('.bar');
+    const cues = {
+      complete: new Audio('audio/dictation-cue-complete.wav'),
+      error: new Audio('audio/dictation-cue-error.wav'),
+    };
+
+    let startTime = null;
+    let timerInterval = null;
+    let lastState = null;
+    let sessionStarted = false;
+    let terminalCuePlayed = false;
+    let stopCuePlayed = false;
+    let partialText = '';
+    let partialDebounce = null;
+    let silenceTimeout = null;
+    let silenceStartTime = null;
+    let activeCaptureStyle = null;
+    let insertionMessage = '';
+    let earlyInsertionFallback = false;
+    let insertionActiveLabel = '';
+    let insertionSettingsUrl = '';
+    let insertionNeedsHelp = false;
+    let dismissTimer = null;
+    let closeTimer = null;
+    let modelMissingDetails = null;
+    let modelDownloadInProgress = false;
+    let recoveryId = null;
+    let overlayRevision = -1;
+    let lastAnnouncement = '';
+    let cuesEnabled = localStorage.getItem('minutes.playCaptureCues') !== 'false';
+
+    Object.assign(cues.complete, { volume: 0.18 });
+    Object.assign(cues.error, { volume: 0.15 });
+
+    function formatTime(secs) {
+      const m = Math.floor(secs / 60);
+      const s = Math.floor(secs % 60);
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+
+    function startTimer() {
+      if (!startTime) startTime = Date.now();
+      timerInterval = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        timer.textContent = formatTime(elapsed);
+      }, 200);
+    }
+
+    function stopTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = null;
+    }
+
+    function playCue(name) {
+      if (!cuesEnabled) return;
+      const cue = cues[name];
+      if (!cue) return;
+      try {
+        // A fast delivery can follow the finishing cue immediately. Keep
+        // acknowledgements distinct rather than layering sounds together.
+        Object.values(cues).forEach((other) => other.pause());
+        cue.currentTime = 0;
+        cue.play().catch(() => {});
+      } catch (_) {}
+    }
+
+    window.addEventListener('storage', (event) => {
+      if (event.key !== 'minutes.playCaptureCues') return;
+      cuesEnabled = event.newValue !== 'false';
+      if (!cuesEnabled) Object.values(cues).forEach((cue) => cue.pause());
+    });
+
+    function announceState(state) {
+      const messages = {
+        starting: 'Dictation starting.',
+        loading: 'Dictation starting.',
+        inserting: 'Dictation processing.',
+        listening: 'Dictation listening.',
+        accumulating: 'Dictation listening.',
+        processing: 'Dictation processing.',
+        typed: 'Dictation inserted.',
+        pasted: 'Dictation inserted.',
+        copied: 'Dictation copied to clipboard.',
+        blocked: 'Dictation could not type at the cursor. Text was preserved.',
+        error: 'Dictation microphone unavailable.',
+        'model-missing': 'Dictation model not installed.',
+        recoverable: 'Dictation audio saved for recovery.',
+      };
+      const message = messages[state];
+      if (!message || message === lastAnnouncement) return;
+      lastAnnouncement = message;
+      announcement.textContent = message;
+    }
+
+    function soften(el) {
+      if (!el) return;
+      el.classList.add('soft-swap');
+      requestAnimationFrame(() => {
+        setTimeout(() => el.classList.remove('soft-swap'), 32);
+      });
+    }
+
+    function showExpanded(show) {
+      if (show) {
+        pill.classList.add('expanded');
+        textRow.classList.add('visible');
+      } else {
+        pill.classList.remove('expanded');
+        textRow.classList.remove('visible');
+      }
+    }
+
+    function setTextContent(text, isPlaceholder) {
+      textContent.textContent = text;
+      textContent.classList.toggle('placeholder', isPlaceholder);
+    }
+
+    function setIndicator(type) {
+      // Remove any injected icons
+      document.getElementById('spin')?.remove();
+      document.getElementById('success-ic')?.remove();
+      document.getElementById('error-ic')?.remove();
+
+      const statusRow = document.getElementById('status-row');
+
+      if (type === 'dot-blink') {
+        indicator.className = 'dot capture blink';
+        indicator.style.display = '';
+      } else if (type === 'dot-solid') {
+        indicator.className = 'dot capture';
+        indicator.style.display = '';
+      } else if (type === 'dot-neutral') {
+        indicator.className = 'dot';
+        indicator.style.display = '';
+      } else if (type === 'spinner') {
+        indicator.className = 'spinner';
+        indicator.style.display = '';
+      } else if (type === 'success') {
+        indicator.style.display = 'none';
+        const ic = document.createElement('span');
+        ic.className = 'success-icon';
+        ic.id = 'success-ic';
+        ic.textContent = '\u2713';
+        statusRow.insertBefore(ic, label);
+      } else if (type === 'error') {
+        indicator.style.display = 'none';
+        const ic = document.createElement('span');
+        ic.className = 'error-icon';
+        ic.id = 'error-ic';
+        ic.textContent = '\u2715';
+        statusRow.insertBefore(ic, label);
+      } else {
+        indicator.style.display = 'none';
+      }
+    }
+
+    function hideSilenceBar() {
+      silenceBar.classList.add('hidden');
+      silenceBar.style.transition = 'none';
+      silenceBar.style.transform = 'scaleX(1)';
+      if (silenceTimeout) {
+        clearTimeout(silenceTimeout);
+        silenceTimeout = null;
+      }
+      silenceStartTime = null;
+    }
+
+    function resetSessionClock() {
+      stopTimer();
+      startTime = null;
+      timer.textContent = '0:00';
+    }
+
+    function setWaveformProcessing(processing) {
+      waveform.classList.toggle('processing', processing);
+    }
+
+    function canDownloadMissingModel(details) {
+      return Boolean(details)
+        && ['tiny', 'base', 'small', 'medium', 'large-v3'].includes(details.model)
+        && !details.setupCommand?.startsWith('rm ');
+    }
+
+    function renderModelMissing() {
+      const details = modelMissingDetails;
+      pill.classList.add('error');
+      setIndicator('error');
+      label.textContent = 'Dictation model not installed';
+      waveform.style.display = 'none';
+      timer.style.display = 'none';
+      showExpanded(true);
+      const modelSummary = details
+        ? `${details.model}${details.sizeHint ? ` • ${details.sizeHint}` : ''}`
+        : 'Required speech model is missing';
+      const interrupted = details?.setupCommand?.startsWith('rm ');
+      setTextContent(
+        interrupted
+          ? `Previous download interrupted. Fix: ${details.setupCommand}`
+          : `${modelSummary}\nFix: ${details?.setupCommand || 'Open Minutes settings to install it.'}`,
+        false
+      );
+      downloadButton.classList.toggle('hidden', !canDownloadMissingModel(details));
+      downloadButton.disabled = modelDownloadInProgress;
+      downloadButton.textContent = modelDownloadInProgress ? 'Downloading…' : 'Download';
+    }
+
+    function isTerminalState(state) {
+      return state === 'typed'
+        || state === 'pasted'
+        || state === 'copied'
+        || state === 'blocked'
+        || state === 'error'
+        || state === 'recoverable'
+        || state === 'cancelled'
+        || state === 'yielded';
+    }
+
+    function cancelDismissTimer() {
+      if (dismissTimer) {
+        clearTimeout(dismissTimer);
+        dismissTimer = null;
+      }
+    }
+
+    function scheduleDismiss(ms) {
+      cancelDismissTimer();
+      dismissTimer = setTimeout(() => {
+        dismissTimer = null;
+        dismiss();
+      }, ms);
+    }
+
+    listen('dictation:model-missing', (e) => {
+      modelMissingDetails = e.payload || null;
+      if (lastState === 'model-missing') renderModelMissing();
+    });
+
+    listen('dictation:recovery', (e) => {
+      recoveryId = e.payload?.id || null;
+    });
+
+    function renderOverlaySnapshot(snapshot) {
+      if (!snapshot || typeof snapshot.state !== 'string') return;
+      if (!Number.isFinite(snapshot.revision) || snapshot.revision <= overlayRevision) return;
+      overlayRevision = snapshot.revision;
+      activeCaptureStyle = snapshot.captureStyle || null;
+      const state = snapshot.state;
+      // Older backends can publish segment success while still listening.
+      // Only an explicit delivery outcome earns completion feedback.
+      if (state === 'success') return;
+      if (!['listening', 'accumulating'].includes(state)) { label.title = ''; pill.title = ''; }
+      const stateChanged = state !== lastState;
+      if (stateChanged && state === 'starting') {
+        sessionStarted = false;
+        stopCuePlayed = false;
+        terminalCuePlayed = false;
+        lastAnnouncement = '';
+        Object.values(cues).forEach((cue) => cue.pause());
+      }
+      if (!isTerminalState(state)) {
+        cancelDismissTimer();
+        if (closeTimer) clearTimeout(closeTimer);
+        closeTimer = null;
+        pill.classList.remove('dismissing');
+      }
+
+      if (stateChanged) {
+        if (state === 'listening' || state === 'accumulating') {
+          // Listening is emitted after the microphone opens. A start sound
+          // would enter the same capture and can become [MUSIC PLAYING].
+          // Stay silent; stop a previous delivery cue on a rapid new capture.
+          Object.values(cues).forEach((cue) => cue.pause());
+          if (!sessionStarted || isTerminalState(lastState)) {
+            sessionStarted = true;
+            terminalCuePlayed = false;
+            stopCuePlayed = false;
+          }
+        }
+        if ((state === 'processing' || state === 'inserting') && sessionStarted && !stopCuePlayed) {
+          stopCuePlayed = true;
+        }
+        if ((state === 'typed' || state === 'pasted' || state === 'copied') && !terminalCuePlayed) {
+          playCue(state === 'copied' && insertionNeedsHelp ? 'error' : 'complete');
+          terminalCuePlayed = true;
+        }
+        if ((state === 'error' || state === 'model-missing' || state === 'blocked' || state === 'recoverable') && !terminalCuePlayed) {
+          playCue('error');
+          terminalCuePlayed = true;
+        }
+        if (state === 'cancelled' || state === 'yielded') {
+          Object.values(cues).forEach((cue) => cue.pause());
+        }
+        announceState(state);
+        lastState = state;
+      }
+
+      pill.classList.remove('error');
+      const busy = ['starting', 'loading', 'processing', 'inserting'].includes(state);
+      const compact = busy || ['listening', 'accumulating', 'typed', 'pasted'].includes(state) || (state === 'copied' && !insertionNeedsHelp);
+      pill.classList.toggle('compact', compact);
+      pill.classList.toggle('busy', busy);
+      pill.classList.toggle('clipboard', state === 'copied');
+      pill.classList.toggle('capturing', ['listening', 'accumulating'].includes(state));
+      pill.classList.toggle('capture-warning', earlyInsertionFallback && ['listening', 'accumulating'].includes(state));
+      stopTimer();
+      hideSilenceBar();
+      if (stateChanged) soften(label);
+      setWaveformProcessing(false);
+      if (state !== 'model-missing') {
+        downloadButton.classList.add('hidden');
+      }
+      reprocessButton.classList.add('hidden');
+      permissionButton.classList.add('hidden');
+      captureControls.classList.toggle('hidden', !['listening', 'accumulating'].includes(state));
+      finishButton.classList.toggle('hidden', activeCaptureStyle === 'held');
+      finishButton.disabled = false; cancelButton.disabled = false;
+
+      switch (state) {
+        case 'starting':
+        case 'loading':
+          insertionMessage = '';
+          earlyInsertionFallback = false;
+          insertionActiveLabel = '';
+          insertionSettingsUrl = '';
+          insertionNeedsHelp = false;
+          permissionButton.disabled = false;
+          permissionButton.textContent = 'Open Settings';
+          resetSessionClock();
+          setIndicator('none');
+          label.textContent = '';
+          waveform.style.display = 'none';
+          timer.style.display = 'none';
+          showExpanded(false);
+          break;
+
+        case 'listening':
+          setIndicator('dot-solid');
+          label.textContent = captureLabel('Listening');
+          waveform.style.display = 'flex';
+          timer.style.display = '';
+          showExpanded(false);
+          partialText = '';
+          setTextContent('...', true);
+          if (!startTime) startTimer();
+          break;
+
+        case 'accumulating':
+          setIndicator('dot-solid');
+          label.textContent = captureLabel('Dictating');
+          waveform.style.display = 'flex';
+          timer.style.display = '';
+          // Stay compact during dictation — text appears only on success
+          showExpanded(false);
+          startTimer();
+          break;
+
+        case 'processing':
+        case 'inserting':
+          setIndicator('none');
+          label.textContent = '';
+          waveform.style.display = 'none';
+          timer.style.display = 'none';
+          showExpanded(false);
+          break;
+
+        case 'partial':
+          // Text checkpoints never claim delivery or change the capture UI.
+          break;
+
+        case 'copied':
+          setIndicator('none');
+          pill.title = 'Copied to clipboard · click the clipboard to see text';
+          label.textContent = insertionNeedsHelp ? 'Copied · typing needs setup' : 'Copied';
+          waveform.style.display = 'none';
+          timer.style.display = 'none';
+          showExpanded(insertionNeedsHelp);
+          if (insertionNeedsHelp) {
+            permissionButton.textContent = 'Fix typing';
+            permissionButton.disabled = false;
+            permissionButton.classList.remove('hidden');
+            scheduleDismiss(7000);
+          } else {
+            scheduleDismiss(2400);
+          }
+          break;
+
+        case 'typed':
+        case 'pasted':
+          setIndicator('none');
+          label.textContent = '';
+          waveform.style.display = 'none';
+          timer.style.display = 'none';
+          showExpanded(false);
+          // Only verified insertion dismisses directly. No extra success phase.
+          if (stateChanged) dismiss();
+          break;
+
+        case 'blocked':
+          waveform.style.display = 'none';
+          timer.style.display = 'none';
+          if (earlyInsertionFallback && insertionSettingsUrl) {
+            setIndicator('success');
+            label.textContent = 'Copied · Accessibility off';
+            showExpanded(true);
+            permissionButton.classList.remove('hidden');
+            scheduleDismiss(7000);
+          } else {
+            pill.classList.add('error');
+            setIndicator('error');
+            label.textContent = insertionMessage || 'Could not type at the cursor';
+            showExpanded(false);
+            scheduleDismiss(2500);
+          }
+          break;
+
+        case 'error':
+          pill.classList.add('error');
+          setIndicator('error');
+          label.textContent = 'Microphone unavailable';
+          waveform.style.display = 'none';
+          timer.style.display = 'none';
+          showExpanded(false);
+          scheduleDismiss(4000);
+          break;
+
+        case 'model-missing':
+          renderModelMissing();
+          break;
+
+        case 'recoverable':
+          setIndicator('dot-solid');
+          label.textContent = 'Audio saved';
+          waveform.style.display = 'none';
+          timer.style.display = 'none';
+          showExpanded(true);
+          setTextContent('Your words are safe. Recover text when you’re ready.', false);
+          reprocessButton.disabled = false;
+          reprocessButton.textContent = 'Recover text';
+          reprocessButton.classList.remove('hidden');
+          break;
+
+        case 'cancelled':
+        case 'yielded':
+          dismiss();
+          break;
+      }
+    }
+
+    function captureLabel(activity) {
+      pill.title = activeCaptureStyle === 'held' ? 'Release to finish. Escape cancels.' : 'Tap again to finish, or choose Finish. Escape cancels.';
+      label.title = pill.title;
+      return earlyInsertionFallback ? 'Copy only' : '';
+    }
+
+    async function finishCapture(command) {
+      finishButton.disabled = true; cancelButton.disabled = true;
+      try { await window.__TAURI__.core.invoke(command); }
+      catch (error) { finishButton.disabled = false; cancelButton.disabled = false; announcement.textContent = String(error); }
+    }
+    finishButton.addEventListener('click', (event) => { event.stopPropagation(); finishCapture('cmd_stop_dictation'); });
+    cancelButton.addEventListener('click', (event) => { event.stopPropagation(); finishCapture('cmd_cancel_dictation'); });
+
+    pill.addEventListener('mousedown', async (event) => {
+      if (event.button !== 0 || event.target.closest('button')) return;
+      try {
+        await window.__TAURI__.window.getCurrentWindow().startDragging();
+        await window.__TAURI__.core.invoke('cmd_remember_dictation_hud_position');
+      } catch (error) {
+        console.error('[dictation-overlay] could not remember HUD position', error);
+      }
+    });
+
+    // Subscribe first, then request the backend snapshot. Revisions make this
+    // handshake safe if a newer event lands while invoke is in flight.
+    listen('dictation:overlay', (e) => renderOverlaySnapshot(e.payload))
+      .then(() => window.__TAURI__.core.invoke('cmd_dictation_overlay_ready'))
+      .then(renderOverlaySnapshot)
+      .catch((error) => console.error('[dictation-overlay] state handshake failed', error));
+
+    listen('download-model', (e) => {
+      const progress = e.payload || {};
+      if (!modelMissingDetails || progress.model !== modelMissingDetails.model) return;
+      if (progress.status === 'downloading') {
+        modelDownloadInProgress = true;
+        downloadButton.disabled = true;
+        downloadButton.textContent = 'Downloading…';
+        label.textContent = `Downloading ${modelMissingDetails.model}…`;
+        const progressLabel = Number.isFinite(progress.percent)
+          ? `${progress.percent}% downloaded`
+          : 'Download in progress';
+        setTextContent(
+          `${progressLabel}${modelMissingDetails.sizeHint ? ` • ${modelMissingDetails.sizeHint}` : ''}`,
+          false
+        );
+      } else if (progress.status === 'complete') {
+        modelDownloadInProgress = false;
+        setIndicator('success');
+        label.textContent = 'Model ready — use your dictation shortcut';
+        setTextContent(`${modelMissingDetails.model} installed successfully.`, false);
+        downloadButton.classList.add('hidden');
+        scheduleDismiss(4500);
+      } else if (progress.status === 'failed') {
+        modelDownloadInProgress = false;
+        pill.classList.add('error');
+        setIndicator('error');
+        label.textContent = 'Model download failed';
+        setTextContent(
+          `${progress.message || 'Download failed.'}\nFix: ${modelMissingDetails.setupCommand}`,
+          false
+        );
+        downloadButton.disabled = false;
+        downloadButton.textContent = 'Retry';
+      }
+    });
+
+    downloadButton.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (modelDownloadInProgress || !canDownloadMissingModel(modelMissingDetails)) return;
+      modelDownloadInProgress = true;
+      renderModelMissing();
+      label.textContent = `Downloading ${modelMissingDetails.model}…`;
+      setIndicator('spinner');
+      pill.classList.remove('error');
+      try {
+        await window.__TAURI__.core.invoke('cmd_download_model', {
+          model: modelMissingDetails.model,
+        });
+        modelDownloadInProgress = false;
+        setIndicator('success');
+        label.textContent = 'Model ready — use your dictation shortcut';
+        setTextContent(`${modelMissingDetails.model} installed successfully.`, false);
+        downloadButton.classList.add('hidden');
+        scheduleDismiss(4500);
+      } catch (error) {
+        modelDownloadInProgress = false;
+        pill.classList.add('error');
+        setIndicator('error');
+        const message = String(error);
+        label.textContent = message.includes('already in progress')
+          ? 'A model download is already in progress'
+          : 'Model download failed';
+        setTextContent(
+          `${message}\nFix: ${modelMissingDetails.setupCommand}`,
+          false
+        );
+        downloadButton.disabled = false;
+        downloadButton.textContent = 'Retry';
+      }
+    });
+
+    permissionButton.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if ((!insertionSettingsUrl && !insertionNeedsHelp) || permissionButton.disabled) return;
+      cancelDismissTimer();
+      permissionButton.disabled = true;
+      permissionButton.textContent = 'Opening…';
+      try {
+        if (insertionNeedsHelp) {
+          await window.__TAURI__.core.invoke('cmd_show_dictation_permission_help');
+          dismiss();
+        } else {
+          await window.__TAURI__.core.invoke('cmd_open_file', { path: insertionSettingsUrl });
+          label.textContent = 'Check Minutes in Accessibility';
+          scheduleDismiss(4500);
+        }
+      } catch (_) {
+        pill.classList.add('error');
+        setIndicator('error');
+        label.textContent = 'Could not open Accessibility settings';
+        permissionButton.disabled = false;
+        permissionButton.textContent = 'Try Again';
+        scheduleDismiss(4500);
+      }
+    });
+
+    reprocessButton.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      cancelDismissTimer();
+      reprocessButton.disabled = true;
+      reprocessButton.textContent = 'Recovering…';
+      label.textContent = 'Recovering dictation';
+      setIndicator('spinner');
+      try {
+        const result = recoveryId
+          ? await window.__TAURI__.core.invoke('cmd_reprocess_dictation', { id: recoveryId })
+          : await window.__TAURI__.core.invoke('cmd_reprocess_last_dictation');
+        setIndicator('success');
+        label.textContent = 'Text recovered';
+        setTextContent(result?.message || 'Recovered dictation from saved audio.', false);
+        reprocessButton.classList.add('hidden');
+        scheduleDismiss(4500);
+      } catch (error) {
+        pill.classList.add('error');
+        setIndicator('error');
+        label.textContent = 'Audio is still safe';
+        setTextContent(String(error), false);
+        reprocessButton.disabled = false;
+        reprocessButton.textContent = 'Try again';
+      }
+    });
+
+    // Listen for partial text updates (streaming whisper)
+    listen('dictation:partial', (e) => {
+      const text = e.payload;
+      if (!text) return;
+      partialText = text;
+
+      // Debounce DOM updates to 150ms to prevent flicker
+      if (partialDebounce) return;
+      partialDebounce = setTimeout(() => {
+        partialDebounce = null;
+        setTextContent(partialText, false);
+      }, 150);
+    });
+
+    // Listen for final result text
+    listen('dictation:result', (e) => {
+      const text = e.payload;
+      if (text) {
+        setTextContent(text, false);
+      }
+    });
+
+    // Listen for audio level updates (waveform animation)
+    listen('dictation:level', (e) => {
+      if (!['listening', 'accumulating'].includes(lastState)) return;
+      const level = Number(e.payload); // 0-100
+      if (!Number.isFinite(level)) return;
+      const normalized = Math.max(0, Math.min(100, level)) / 100;
+      bars.forEach((bar, i) => {
+        // A stable silhouette, driven by measured input rather than a fake
+        // time-based wave. The 16px CSS height is the transform's basis.
+        const variance = Math.sin(((i + 1) / (bars.length + 1)) * Math.PI) * 0.3 + 0.7;
+        const h = 4 + normalized * 12 * variance;
+        bar.style.transform = `scaleY(${Math.max(4, Math.min(16, h)) / 16})`;
+      });
+    });
+
+    listen('dictation:insertion', (e) => {
+      const payload = e.payload || {};
+      insertionMessage = payload.message || insertionMessage;
+      if (Object.prototype.hasOwnProperty.call(payload, 'earlyFallback')) {
+        earlyInsertionFallback = Boolean(payload.earlyFallback);
+      }
+      insertionActiveLabel = payload.activeLabel || insertionActiveLabel;
+      insertionSettingsUrl = payload.settingsUrl || insertionSettingsUrl;
+      insertionNeedsHelp = payload.outcome === 'copied'
+        && payload.method === 'clipboard_only'
+        && String(payload.message || '').startsWith('Could not type into the active app.');
+      if (earlyInsertionFallback && (lastState === 'listening' || lastState === 'accumulating')) {
+        pill.classList.add('capture-warning');
+        label.textContent = captureLabel(lastState === 'accumulating' ? 'Dictating' : 'Listening');
+      }
+    });
+
+    // Listen for silence countdown (emitted by backend as ms remaining)
+    listen('dictation:silence', (e) => {
+      const { total_ms, remaining_ms } = e.payload;
+      if (remaining_ms <= 0 || total_ms <= 0) {
+        hideSilenceBar();
+        return;
+      }
+      const fraction = remaining_ms / total_ms;
+      silenceBar.classList.remove('hidden');
+      silenceBar.style.transition = 'none';
+      silenceBar.style.transform = `scaleX(${fraction})`;
+      // Animate the remaining portion to zero
+      requestAnimationFrame(() => {
+        silenceBar.style.transition = `transform ${remaining_ms}ms linear`;
+        silenceBar.style.transform = 'scaleX(0)';
+      });
+    });
+
+    function dismiss() {
+      cancelDismissTimer();
+      pill.classList.add('dismissing');
+      if (closeTimer) return;
+      closeTimer = setTimeout(() => {
+        closeTimer = null;
+        window.__TAURI__.core.invoke('cmd_dismiss_dictation_overlay')
+          .catch(() => window.__TAURI__.window.getCurrentWindow().close());
+      }, 150);
+    }
+
+    // Click to dismiss early (during success state)
+    pill.addEventListener('click', () => {
+      if (isTerminalState(lastState)) {
+        dismiss();
+      }
+    });
+
+    clipboardButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (lastState !== 'copied') return;
+      cancelDismissTimer();
+      pill.classList.remove('compact');
+      label.textContent = insertionNeedsHelp ? 'Copied · typing needs setup' : 'Copied to clipboard';
+      showExpanded(true);
+    });
+    // Let people reach the clipboard affordance before it disappears.
+    pill.addEventListener('mouseenter', () => { if (lastState === 'copied') cancelDismissTimer(); });
+    pill.addEventListener('focusin', () => { if (lastState === 'copied') cancelDismissTimer(); });
+
+    // Esc key cancels
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        window.__TAURI__.core.invoke('cmd_cancel_dictation').catch(() => {});
+      }
+    });
+  </script>
+</body>
+</html>

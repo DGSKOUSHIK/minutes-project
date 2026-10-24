@@ -1,0 +1,80 @@
+[package]
+name = "minutes-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "CLI for minutes — record, transcribe, and search conversation memory"
+keywords = ["meeting", "transcription", "whisper", "ai", "memory"]
+categories = ["multimedia::audio", "command-line-utilities"]
+readme = "README.md"
+default-run = "minutes"
+
+[[bin]]
+name = "minutes"
+path = "src/main.rs"
+
+[[bin]]
+name = "minutes-graph-worker"
+path = "src/bin/minutes-graph-worker.rs"
+
+[[bin]]
+name = "minutes-apple-speech-worker"
+path = "src/bin/minutes-apple-speech-worker.rs"
+
+[features]
+default = ["whisper", "diarize"]
+whisper = ["minutes-core/whisper"]
+diarize = ["minutes-core/diarize", "dep:pyannote-rs", "dep:ort"]
+parakeet = ["whisper", "minutes-core/parakeet"]
+# Opt-in sherpa-onnx + parakeet-v3 transcription engine (off by default).
+# `minutes setup --sherpa` works without this feature (path helpers are ungated);
+# this feature compiles the actual engine so `engine = "sherpa"` transcribes.
+engine-sherpa = ["minutes-core/engine-sherpa"]
+pocketstation-capture = ["minutes-core/pocketstation-capture"]
+# Streaming Silero VAD via ort. Pulls minutes-core's vad-ort. Also
+# wires the setup-time download for silero-vad-v6.2.0.onnx.
+vad-ort = ["minutes-core/vad-ort", "dep:ort"]
+# Voice Live: push-to-talk spoken assistant over a realtime speech model (RFC 0007).
+# Off by default: it is a cloud provider behind an explicit config opt-in.
+voice-live = ["minutes-core/voice-live"]
+coreml = ["minutes-core/coreml"]
+cuda = ["minutes-core/cuda"]
+hipblas = ["minutes-core/hipblas"]
+metal = ["minutes-core/metal"]
+vulkan = ["minutes-core/vulkan"]
+
+[dependencies]
+minutes-core = { path = "../core", version = "0.30.10", default-features = false, features = ["streaming"] }
+clap = { workspace = true }
+ctrlc = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+hound = { workspace = true }
+dirs = { workspace = true }
+fs2 = { workspace = true }
+schemars = { workspace = true, features = ["derive"] }
+serde_yaml = { workspace = true }
+ureq = { workspace = true }
+csv = "1"
+walkdir = { workspace = true }
+pyannote-rs = { workspace = true, optional = true }
+# Pin ort to rc.10 — rc.12 switched to ndarray 0.17 which conflicts with pyannote-rs's ndarray 0.16.
+# This constraint is respected even by `cargo install minutes-cli` from crates.io.
+# Remove once pyannote-rs ships a fix (tracked: thewh1teagle/pyannote-rs#27).
+ort = { version = "=2.0.0-rc.10", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_SystemInformation"] }
+
+[dev-dependencies]
+tempfile = "3"

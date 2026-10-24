@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Minutes Archive",
+  "identifier": "com.useminutes.archive",
+  "version": "0.2.0",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Minutes Archive",
+        "width": 1240,
+        "height": 960,
+        "minWidth": 840,
+        "minHeight": 640,
+        "center": true,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "../../tauri/src-tauri/icons/icon.icns",
+      "../../tauri/src-tauri/icons/icon.ico",
+      "../../tauri/src-tauri/icons/app-icon.png"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "dmg": {
+        "background": "../../tauri/src-tauri/dmg-background.png",
+        "windowSize": { "width": 660, "height": 400 },
+        "appPosition": { "x": 180, "y": 200 },
+        "applicationFolderPosition": { "x": 480, "y": 200 }
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUyMjA0OUE4OTg1RjhCNDYKUldSR2kxK1lxRWtnNHRKQ2ZxenRqN1V6cFhCSUFDT0tZVTBHUk1LdGJuOFJzdTVkd2xsNjZFQTUK",
+      "endpoints": [
+        "https://github.com/silverstein/minutes/releases/download/archive-stable/latest-archive.json"
+      ]
+    }
+  }
+}

@@ -1,0 +1,295 @@
+# minutes-sdk
+
+Conversation memory for AI agents. Query meeting transcripts, decisions, action items, and people from any AI agent or application.
+
+The "Mem0 for human conversations." Works with [Minutes](https://github.com/silverstein/minutes) meeting files or any markdown with YAML frontmatter.
+
+## Install
+
+```bash
+npm install minutes-sdk
+```
+
+## Quick start
+
+```typescript
+import { listMeetings, searchMeetings, findOpenActions } from 'minutes-sdk';
+
+// List recent meetings
+const meetings = await listMeetings('~/meetings');
+// → [{ frontmatter: { title, date, action_items, decisions, ... }, body, path }]
+
+// Search policy-authorized meetings within the supported corpus bounds
+const results = await searchMeetings('~/meetings', 'pricing strategy');
+
+// Find open action items
+const actions = await findOpenActions('~/meetings', 'alex');
+// → [{ path: '...', item: { assignee: 'alex', task: '...', status: 'open' } }]
+```
+
+## API
+
+### `listMeetings(dir, limit?, options?)`
+
+List meetings sorted by date (newest first). `limit` must be an integer from 1
+through `SDK_MEETING_RESULT_MAX` (10,000). Restricted meetings are excluded by
+default; pass `{ includeRestricted: true }` only for an explicit override.
+
+```typescript
+const meetings = await listMeetings('~/meetings', 50);
+```
+
+### `searchMeetings(dir, query, limit?, options?)`
+
+Literal lexical search across titles and transcripts. It uses the same validated
+1–10,000 meeting-result limit and restricted-meeting policy as `listMeetings`.
+
+The `literal-and-prefix-v1` contract is shared with the CLI and MCP: normalize
+Unicode accents, compare lowercase letter/number tokens, require every token,
+and prefix-match only the final token when it has at least two code points.
+Single-character terms match exactly; `AND`, `OR`, and `NOT` are literal words.
+There is no implicit stemming. Queries are limited to 2,048 UTF-16 code units.
+Results rank lexical relevance first (title occurrences have greater weight),
+then date and path. `retrieval.score` is a ranking score, not a confidence level.
+
+Search results and full `getMeeting` results now carry an additive `evidence`
+bundle. It contains the SHA-256 revision of the **exact original Markdown**,
+stable source/segment IDs, exact quotes, 1-based lines, and 0-based UTF-16
+`start`/`end` offsets into that Markdown. Timestamp and speaker fields are present
+only when source text supports them. Only high-confidence speaker attributions
+carry a name. Quotes are bounded to 1,200 code units; `quote_truncated` and the
+bundle's `truncated` flag disclose omitted context. A citation path or timestamp
+does not authorize reading or playing any inferred audio file. Changing source
+bytes invalidates segment IDs. Restricted stubs contain no evidence identifiers.
+
+```typescript
+const results = await searchMeetings('~/meetings', 'Q2 roadmap');
+```
+
+### `getDecisionHistory(dir, options?)`
+
+Project decisions from one policy-authorized corpus snapshot. Options include
+`includeRestricted`, `asOf` (an ISO date; defaults to now), and `limit` (1–1,000).
+Every entry includes an ID bound to the source revision, an exact YAML text
+evidence span, recorded/effective dates, and a state:
+
+- `current`: one unresolved statement remains for the topic, with no broken links.
+- `superseded`: a unique explicit successor names this decision.
+- `unresolved`: multiple statements, ambiguous links, or competing successors.
+- `unknown`: missing topic/evidence, invalid dates, or a future effective date.
+
+Optional decision fields are preserved: `id`, `authority`, `supersedes`, and
+`effective_date`. A supersession may name a unique declared/generated ID, exact
+decision text, or source `YYYY-MM-DD` within the same topic. Missing effective
+dates use the recorded date with `effective_date_basis: "recorded-at"`. Calendar dates must be valid `YYYY-MM-DD` values or RFC3339 instants with a timezone; shorthand and rollover dates are not accepted. Distinct
+statements are **not** automatically classified as contradictions. The analysis
+processes the complete authorized input before limiting output and refuses more
+than 10,000 decision records. Restricted and inactive sources cannot settle a
+visible decision.
+
+### Experimental local semantic evaluation
+
+`fuseAuthorizedRankings(authorizedCandidates, rankings, options?)` provides pure
+reciprocal-rank fusion for local experiments. Pass a map of IDs from the current
+authorized snapshot and ranked lexical/semantic scores. Unknown IDs, revoked IDs,
+duplicates, and non-finite provider scores cannot add candidates. The helper
+performs no I/O and installs no model. Callers must still reauthorize their source
+snapshot before publishing; it is not an authorization API or a measured claim
+that semantic search improves this corpus.
+
+### `getMeeting(path, options?)`
+
+Read one meeting inside `options.rootDir` (the configured meetings directory by
+default). The result is `Promise<ExactMeetingResult | null>`: missing, unsafe,
+or out-of-root paths return `null`. A restricted meeting returns a path-free
+`restricted_stub` by default; `{ includeRestricted: true }` is the explicit,
+logged override.
+
+```typescript
+const meeting = await getMeeting('~/meetings/2026-03-24-planning.md');
+if (!meeting) {
+  console.log('Meeting unavailable');
+} else if (meeting.restricted_stub) {
+  console.log(meeting.body); // exclusion notice; never the transcript
+} else {
+  console.log(meeting.frontmatter.decisions);
+}
+```
+
+### `findOpenActions(dir, assignee?, options?)`
+
+Find open action items, optionally filtered by assignee. Set `options.limit` to
+an integer from 1 through `SDK_OPEN_ACTION_RESULT_MAX` (1,000); omitted limits
+default to that hard cap. Restricted meetings are excluded unless
+`options.includeRestricted` is explicitly set.
+
+```typescript
+const allOpen = await findOpenActions('~/meetings');
+const mine = await findOpenActions('~/meetings', 'mat');
+const firstTen = await findOpenActions('~/meetings', undefined, { limit: 10 });
+```
+
+### `getPersonProfile(dir, name, options?)`
+
+Build a profile for someone across policy-authorized meetings within the supported corpus bounds, including their meetings, open action items, and topics. Names match exact normalized labels, declared canonical IDs or explicit `entities.people` aliases. Empty and ambiguous selectors are rejected; transcript substrings and uncertain speaker guesses do not establish identity. Meetings/topics require participation evidence, while owned actions may come from a meeting they did not attend.
+The three returned collections are independently bounded. Use `meetingLimit`,
+`openActionLimit`, and `topicLimit`; each defaults to and may not exceed its
+exported 1,000-item cap. `includeRestricted` defaults to false.
+
+```typescript
+const profile = await getPersonProfile('~/meetings', 'alex');
+// → { name, meetings: [...], openActions: [...], topics: ['pricing', 'api'] }
+```
+
+## Availability and resource bounds
+
+Multi-meeting reads are fail-closed snapshots, not partial best-effort scans.
+They require local filesystem watcher support and successful sentinel delivery,
+then reverify the canonical root and complete active-Markdown manifest before
+returning. Watcher errors, missing events, unstable roots, or an unsupported
+network/FUSE-style filesystem deny the whole call after bounded retries.
+
+Each Markdown file is limited to 16 MiB and the total decoded corpus to 80 MiB.
+Directory, entry, watcher, helper-process, and result counts are also bounded.
+Exceeding any bound denies the whole multi-meeting operation; it never silently
+returns a partial corpus. Every call performs a full baseline snapshot and a
+final manifest verification. The helper-process pool is constant-bounded, but
+the retained snapshot uses O(corpus bytes) memory within the hard corpus limit.
+
+### `listVoiceMemos(dir, options?)`
+
+List recent memos newest-first. `options.limit` is bounded to 1–1,000 and
+`options.days` to 0–36,500. Restricted memos are excluded unless
+`options.includeRestricted` is explicitly set.
+
+### `findDecisions(dir, topic?, limit?, options?)`
+
+List decisions newest-first. `limit` defaults to 50 and must be an integer from
+1 through `SDK_DECISION_RESULT_MAX` (1,000). Restricted meetings are excluded
+unless `options.includeRestricted` is explicitly set.
+
+### Restricted-read options
+
+Every agent-facing collection read excludes `sensitivity: restricted` sources
+by default. Passing `{ includeRestricted: true }` is an explicit override and
+writes a warning naming the surfaced count and read surface to stderr. For
+exact-path `getMeeting` reads, `options.rootDir` selects the authoritative
+active-corpus root; paths outside that root still return `null`.
+
+### `parseFrontmatter(content, path)`
+
+Parse a markdown string into a `MeetingFile`. Useful for custom integrations.
+
+```typescript
+import { parseFrontmatter } from 'minutes-sdk';
+
+const meeting = parseFrontmatter(markdownString, '/path/to/file.md');
+```
+
+## Use with AI frameworks
+
+### Vercel AI SDK tool
+
+```typescript
+import { tool } from 'ai';
+import { z } from 'zod';
+import { searchMeetings } from 'minutes-sdk';
+
+const meetingSearch = tool({
+  description: 'Search past meeting transcripts and decisions',
+  parameters: z.object({ query: z.string() }),
+  execute: async ({ query }) => {
+    const results = await searchMeetings('~/meetings', query, 5);
+    return results.map(m => ({
+      title: m.frontmatter.title,
+      date: m.frontmatter.date,
+      decisions: m.frontmatter.decisions,
+      actions: m.frontmatter.action_items,
+    }));
+  },
+});
+```
+
+### LangChain tool
+
+```typescript
+import { DynamicTool } from '@langchain/core/tools';
+import { searchMeetings } from 'minutes-sdk';
+
+const meetingTool = new DynamicTool({
+  name: 'search_meetings',
+  description: 'Search meeting transcripts for decisions and context',
+  func: async (query) => {
+    const results = await searchMeetings('~/meetings', query, 5);
+    return JSON.stringify(results.map(m => ({
+      title: m.frontmatter.title,
+      date: m.frontmatter.date,
+      summary: m.body.slice(0, 500),
+    })));
+  },
+});
+```
+
+## Types
+
+```typescript
+interface MeetingFile {
+  frontmatter: Frontmatter;
+  body: string;      // Full markdown body (transcript, summary, notes)
+  path: string;      // Absolute file path
+}
+
+interface Frontmatter {
+  title: string;
+  type: string;      // "meeting" | "memo" | "dictation" | "note"
+  date: string;      // ISO 8601
+  duration: string;
+  source?: string;   // "voice-memos" | "dictation" | undefined
+  device?: string;   // "iPhone" etc (cross-device pipeline)
+  tags: string[];
+  attendees: string[];
+  people: string[];
+  action_items: ActionItem[];
+  decisions: Decision[];
+  intents: Intent[];  // Structured commitments, questions, decisions
+}
+
+interface ActionItem {
+  assignee: string;
+  task: string;
+  due?: string;
+  status: string;    // "open" | "done"
+}
+
+interface Decision {
+  text: string;
+  topic?: string;
+}
+
+interface Intent {
+  kind: string;      // "commitment" | "decision" | "open-question"
+  what: string;
+  who?: string;
+  status: string;
+  by_date?: string;
+}
+```
+
+## How it works
+
+The SDK reads markdown files with YAML frontmatter produced by [Minutes](https://github.com/silverstein/minutes). The SDK uses files on disk without a database, server or API key.
+
+```
+~/meetings/
+├── 2026-03-24-q2-planning.md          ← meetings
+├── 2026-03-24-client-call.md
+└── memos/
+    ├── 2026-03-24-pricing-idea.md     ← voice memos
+    └── 2026-03-23-onboarding-thought.md
+```
+
+Each file has structured YAML frontmatter (title, date, attendees, action items, decisions, intents) and a markdown body (transcript, summary, notes). The SDK parses these and provides query functions.
+
+## License
+
+MIT

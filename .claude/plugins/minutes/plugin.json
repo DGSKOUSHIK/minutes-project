@@ -1,0 +1,68 @@
+{
+  "name": "minutes",
+  "version": "0.21.1",
+  "description": "Conversation memory for AI assistants: record, transcribe, search meetings and voice memos. 24 skills for the full meeting lifecycle, including a governed Minutes to X1 closeout handoff.",
+  "skills": [
+    { "name": "minutes-record", "path": "skills/minutes-record/SKILL.md" },
+    { "name": "minutes-search", "path": "skills/minutes-search/SKILL.md" },
+    { "name": "minutes-list", "path": "skills/minutes-list/SKILL.md" },
+    { "name": "minutes-recap", "path": "skills/minutes-recap/SKILL.md" },
+    { "name": "minutes-note", "path": "skills/minutes-note/SKILL.md" },
+    { "name": "minutes-verify", "path": "skills/minutes-verify/SKILL.md" },
+    { "name": "minutes-setup", "path": "skills/minutes-setup/SKILL.md" },
+    { "name": "minutes-cleanup", "path": "skills/minutes-cleanup/SKILL.md" },
+    { "name": "minutes-brief", "path": "skills/minutes-brief/SKILL.md" },
+    { "name": "minutes-prep", "path": "skills/minutes-prep/SKILL.md" },
+    { "name": "minutes-debrief", "path": "skills/minutes-debrief/SKILL.md" },
+    { "name": "minutes-tag", "path": "skills/minutes-tag/SKILL.md" },
+    { "name": "minutes-mirror", "path": "skills/minutes-mirror/SKILL.md" },
+    { "name": "minutes-weekly", "path": "skills/minutes-weekly/SKILL.md" },
+    { "name": "minutes-ideas", "path": "skills/minutes-ideas/SKILL.md" },
+    { "name": "minutes-lint", "path": "skills/minutes-lint/SKILL.md" },
+    { "name": "minutes-ingest", "path": "skills/minutes-ingest/SKILL.md" },
+    { "name": "minutes-graph", "path": "skills/minutes-graph/SKILL.md" },
+    { "name": "minutes-video-review", "path": "skills/minutes-video-review/SKILL.md" },
+    { "name": "minutes-copilot", "path": "skills/minutes-copilot/SKILL.md" },
+    { "name": "minutes-live-sidekick", "path": "skills/minutes-live-sidekick/SKILL.md" },
+    { "name": "minutes-release-notes", "path": "skills/minutes-release-notes/SKILL.md" },
+    { "name": "minutes-mcp-recall", "path": "skills/minutes-mcp-recall/SKILL.md" },
+    { "name": "minutes-x1-closeout", "path": "skills/minutes-x1-closeout/SKILL.md" },
+    { "name": "minutes-x1-send-meeting", "path": "skills/minutes-x1-send-meeting/SKILL.md" }
+  ],
+  "agents": [
+    { "name": "meeting-analyst", "path": "agents/meeting-analyst.md" }
+  ],
+  "mcpServers": {
+      "minutes": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "minutes-mcp"
+        ]
+      }
+    },
+  "hooks": {
+      "SessionStart": [
+        {
+          "matcher": "startup",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-reminder.mjs\""
+            }
+          ]
+        }
+      ],
+      "PostToolUse": [
+        {
+          "matcher": "Bash",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-record.mjs\""
+            }
+          ]
+        }
+      ]
+    }
+}

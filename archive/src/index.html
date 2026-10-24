@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Private, evidence-first search across explicitly approved local archive locations."
+    />
+    <title>Minutes Archive</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="#main-content" aria-label="Minutes Archive home">
+          <span class="brand-mark" aria-hidden="true">A</span>
+          <span>Minutes Archive</span>
+        </a>
+        <div class="mode-badges" aria-label="Application protections">
+          <span class="badge badge-local"><span class="dot"></span>Documents stay local</span>
+          <span class="badge">Private pilot</span>
+        </div>
+      </header>
+
+      <!--
+        The one place this application touches the network, stated where it
+        happens rather than in a settings pane nobody opens. It reports the
+        check before, during and after, so "an update check ran" is something
+        the operator saw rather than something they have to take on trust.
+      -->
+      <section
+        id="update-strip"
+        class="update-strip"
+        aria-label="Update check"
+        aria-atomic="true"
+        aria-live="polite"
+        role="status"
+        tabindex="-1"
+        hidden
+      >
+        <span id="update-dot" class="update-dot" aria-hidden="true"></span>
+        <div>
+          <strong id="update-headline">Checking for a signed update</strong>
+          <p id="update-detail">
+            One request for a version file, made before any folder is approved.
+            No archive data or app-supplied identifier is sent. The server still
+            sees this Mac's IP address and request time.
+          </p>
+        </div>
+        <button id="install-update" class="button button-secondary" type="button" hidden>
+          Install update
+        </button>
+      </section>
+
+      <section id="main-content" class="hero">
+        <p class="eyebrow">Local only · nothing is uploaded</p>
+        <h1>Map first. Then find the exact language.</h1>
+        <p class="hero-copy">
+          First count what is in your folders, without opening anything. If
+          that looks right, open the documents so you can search them and get
+          exact quotes that point back to the file they came from. Nothing
+          leaves this Mac.
+        </p>
+      </section>
+
+      <div class="workspace">
+        <aside class="rail" aria-label="Census steps">
+          <ol class="steps">
+            <li class="step is-active" data-step="1">
+              <span class="step-number">1</span>
+              <div>
+                <strong>Choose folders</strong>
+                <span>Nothing is looked at until you pick it.</span>
+              </div>
+            </li>
+            <li class="step" data-step="2">
+              <span class="step-number">2</span>
+              <div>
+                <strong>Count what is there</strong>
+                <span>Counts only. Your files stay closed.</span>
+              </div>
+            </li>
+            <li class="step" data-step="3">
+              <span class="step-number">3</span>
+              <div>
+                <strong>Check the totals</strong>
+                <span>See what is there before opening anything.</span>
+              </div>
+            </li>
+            <li class="step" data-step="4">
+              <span class="step-number">4</span>
+              <div>
+                <strong>Search your documents</strong>
+                <span>PDFs, Word files, text, and scans — all read on this Mac.</span>
+              </div>
+            </li>
+          </ol>
+
+          <div class="assurance">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3 5.5 5.8v5.3c0 4.5 2.8 8.5 6.5 9.9 3.7-1.4 6.5-5.4 6.5-9.9V5.8L12 3Z" />
+              <path d="m9.2 12 1.7 1.8 4-4.3" />
+            </svg>
+            <div>
+              <strong>This step cannot open your documents</strong>
+              <p>
+                Opening documents is a separate step that you choose.
+                Nothing here follows shortcuts, sends anything to an AI
+                service, or uploads.
+              </p>
+            </div>
+          </div>
+        </aside>
+
+        <section class="panel" aria-labelledby="locations-title">
+          <div id="setup-view">
+            <div class="panel-heading">
+              <div>
+                <p class="section-label">Step 1</p>
+                <h2 id="locations-title">Folders you have approved</h2>
+                <p>
+                  Pick folders the way you would in Finder — Documents,
+                  iCloud Drive, an external drive, anything. Each folder is
+                  approved on its own, and you can remove it at any time.
+                </p>
+              </div>
+              <div class="location-actions">
+                <button id="add-locations" class="button button-secondary" type="button">
+                  <span aria-hidden="true">＋</span>
+                  Choose folders
+                </button>
+                <button id="skip-folders" class="button button-secondary" type="button" disabled>
+                  <span aria-hidden="true">−</span>
+                  Skip folders
+                </button>
+                <button id="clear-skipped" class="button button-quiet" type="button" hidden>
+                  Clear skipped
+                </button>
+              </div>
+            </div>
+
+            <div id="empty-locations" class="empty-state">
+              <div class="folder-illustration" aria-hidden="true">
+                <span></span>
+              </div>
+              <strong>No folders chosen yet</strong>
+              <p>Your whole home folder and your whole disk are refused on purpose.</p>
+            </div>
+
+            <ul id="location-list" class="location-list" aria-live="polite"></ul>
+
+            <div class="privacy-strip">
+              <span class="privacy-icon" aria-hidden="true">◎</span>
+              <div>
+                <strong>Reports you save are safe to share</strong>
+                <p>
+                  A saved report is counts only — no folder names, no file
+                  names, and nothing from inside your documents.
+                </p>
+              </div>
+            </div>
+
+            <div class="action-row">
+              <p id="setup-status" class="status" role="status">
+                Choose at least one folder to continue.
+              </p>
+              <button id="run-census" class="button button-primary" type="button" disabled>
+                Count what is there
+                <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="scanning-view" class="scanning-view" hidden aria-live="polite">
+            <div class="scan-orbit" aria-hidden="true">
+              <span></span>
+            </div>
+            <p class="section-label">Counting only</p>
+            <h2>Looking through your folders…</h2>
+            <p>
+              Counting file types, sizes, and dates. Not one document is
+              opened.
+            </p>
+            <div class="progress-track" aria-hidden="true">
+              <span></span>
+            </div>
+            <button id="cancel-census" class="button button-quiet" type="button">
+              Stop counting
+            </button>
+          </div>
+
+          <div id="results-view" hidden>
+            <div class="results-heading">
+              <div>
+                <p class="section-label">Totals</p>
+                <h2>What is in your folders</h2>
+                <p id="result-summary">Counted without opening a single document.</p>
+              </div>
+              <div id="result-status" class="result-status">Complete</div>
+            </div>
+
+            <div class="metrics" aria-label="Census totals">
+              <article class="metric">
+                <span>Files</span>
+                <strong id="metric-artifacts">—</strong>
+              </article>
+              <article class="metric">
+                <span>Folders</span>
+                <strong id="metric-locations">—</strong>
+              </article>
+              <article class="metric">
+                <span>Total size</span>
+                <strong id="metric-bytes">—</strong>
+              </article>
+              <article class="metric">
+                <span>Still in iCloud</span>
+                <strong id="metric-cloud">—</strong>
+              </article>
+            </div>
+
+            <div class="result-grid">
+              <section class="coverage-card" aria-labelledby="coverage-title">
+                <div class="card-title">
+                  <div>
+                    <p class="section-label">File types</p>
+                    <h3 id="coverage-title">What kinds of files you have</h3>
+                  </div>
+                  <span class="metadata-pill">Counts only</span>
+                </div>
+                <div id="category-list" class="category-list"></div>
+              </section>
+
+              <section class="signals-card" aria-labelledby="signals-title">
+                <p class="section-label">Worth knowing</p>
+                <h3 id="signals-title">What needs attention</h3>
+                <dl id="signals-list" class="signals-list"></dl>
+              </section>
+            </div>
+
+            <div class="verified-strip">
+              <span aria-hidden="true">✓</span>
+              <div>
+                <strong>Nothing inside your documents was read</strong>
+                <p>
+                  No file names or folder names were recorded, and no
+                  shortcuts were followed.
+                </p>
+              </div>
+            </div>
+
+            <div class="pilot-strip">
+              <div>
+                <p class="section-label">Optional next step</p>
+                <strong>Open your documents so you can search them</strong>
+                <p id="build-forecast" class="build-forecast" hidden></p>
+                <p>
+                  This opens your PDFs, Word, OpenDocument, RTF, text, and
+                  Markdown files, and reads scanned images with the text
+                  reader built into macOS. Text from a scan is a machine
+                  reading a picture, so it is never quoted as the document's
+                  own words. Everything is read on this Mac, by helper
+                  programs that have no network access, and it is all held in
+                  memory — nothing is written to disk. Scans, very old Word
+                  files, and email archives are counted but not searched.
+                </p>
+              </div>
+              <button id="build-text-vault" class="button button-primary" type="button">
+                Open my documents
+                <span aria-hidden="true">→</span>
+              </button>
+            </div>
+
+            <div class="action-row results-actions">
+              <button id="start-over" class="button button-secondary" type="button">
+                Change locations
+              </button>
+              <div class="export-group">
+                <span id="export-status" class="status" role="status"></span>
+                <button id="export-report" class="button button-primary" type="button">
+                  Export aggregate report
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div id="indexing-view" class="scanning-view" hidden aria-live="polite">
+            <div class="scan-orbit" aria-hidden="true">
+              <span></span>
+            </div>
+            <p class="section-label">You chose this step</p>
+            <h2>Reading your documents…</h2>
+            <p>
+              Reading the files this app supports from the folders you
+              approved. Everything happens on this Mac, in helper programs
+              with no network access. Shortcuts are skipped, and the result
+              is held in memory only. macOS provides the language model used
+              for suggestions; nothing is downloaded.
+            </p>
+            <div class="progress-track" aria-hidden="true">
+              <span></span>
+            </div>
+            <p id="indexing-progress" class="indexing-progress" aria-live="polite">
+              Starting…
+            </p>
+            <button id="cancel-indexing" class="button button-quiet" type="button">
+              Cancel and discard
+            </button>
+          </div>
+
+          <div id="search-view" hidden>
+            <div class="search-heading">
+              <div>
+                <p class="section-label">Search</p>
+                <h2>Search your documents</h2>
+                <div id="vault-summary">
+                  <p>Your documents are ready to search. Nothing was saved to disk.</p>
+                </div>
+              </div>
+              <button id="back-to-census" class="button button-secondary" type="button">
+                Folders &amp; totals
+              </button>
+            </div>
+
+            <form id="search-form" class="search-form">
+              <label for="search-query">What language are you looking for?</label>
+              <div class="search-input-row">
+                <textarea
+                  id="search-query"
+                  rows="3"
+                  maxlength="2000"
+                  placeholder="Find confidentiality provisions no more than three sentences covering affiliates, compelled disclosure, and survival."
+                ></textarea>
+                <button id="search-submit" class="button button-primary" type="submit">
+                  Search
+                </button>
+              </div>
+              <p class="search-help">
+                You can ask for several things at once — “documents with
+                assignment, governing law, and a BAA reference” — or just
+                describe a clause in your own words. Close matches are listed
+                separately from exact ones.
+              </p>
+            </form>
+
+            <div id="query-interpretation" class="query-interpretation" hidden>
+              <div>
+                <p class="section-label">What was searched for</p>
+                <div id="query-chips" class="query-chips"></div>
+              </div>
+              <span id="candidate-count" class="metadata-pill"></span>
+            </div>
+
+            <p id="search-status" class="status search-status" role="status">
+              Type what you are looking for. You get exact quotes from your
+              own documents, not an answer written by an AI.
+            </p>
+            <div id="search-results" class="search-results"></div>
+
+            <div class="verified-strip search-verification">
+              <span aria-hidden="true">✓</span>
+              <div>
+                <strong>Each result was checked against the real file when this search ran</strong>
+                <p>
+                  Minutes does not watch files after the search. If a document
+                  changes, Show in Finder refuses it; run the search again for
+                  current quotes.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div id="error-banner" class="error-banner" role="alert" hidden>
+            <strong>Minutes Archive stopped safely.</strong>
+            <span id="error-message"></span>
+            <button id="dismiss-error" type="button" aria-label="Dismiss error">×</button>
+          </div>
+        </section>
+      </div>
+
+      <footer>
+        <span id="build-identity">Minutes Archive</span>
+        <span aria-hidden="true">•</span>
+        <span>Updates only before folders open</span>
+        <span aria-hidden="true">•</span>
+        <span>Closing this window forgets everything</span>
+      </footer>
+    </main>
+  </body>
+</html>

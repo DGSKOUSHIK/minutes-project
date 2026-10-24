@@ -1,0 +1,538 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+fn main() {
+    link_swift_runtime_rpath();
+    compile_mic_check_helper();
+    compile_system_audio_helper();
+    compile_calendar_helper();
+    stage_rust_sidecars();
+    stage_assistant_skill_bundle();
+    stage_msvc_runtime();
+    tauri_build::build()
+}
+
+/// The core crate links Swift Foundation/AVFoundation symbols into the
+/// downstream desktop binary. Cargo link arguments emitted by `crates/core`
+/// apply only to that crate's own targets, so the app must carry its own
+/// runtime search path for macOS's Swift libraries.
+fn link_swift_runtime_rpath() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        println!("cargo:rustc-link-arg-bin=minutes-app=-Wl,-rpath,/usr/lib/swift");
+    }
+}
+
+/// Copy the MSVC runtime next to the app so Windows bundles carry it.
+///
+/// The app imports VCRUNTIME140.dll, VCRUNTIME140_1.dll, MSVCP140.dll and
+/// MSVCP140_1.dll. Those ship in the Visual C++ Redistributable, not in
+/// Windows, so on a PC that has never had it the app exits 0xC0000135
+/// (STATUS_DLL_NOT_FOUND) showing nothing at all (#657). Verified on a clean
+/// Windows 11 VM: the same binary fails bare and runs with these four files
+/// beside it.
+///
+/// `bundle.resources` places bare filenames next to the executable, which is
+/// where the loader looks, but the files must exist when Tauri resolves the
+/// glob or the build fails outright. Staging here keeps Microsoft binaries out
+/// of the repo (they are gitignored).
+///
+/// Gated on the **target**, not the host, matching every other staging
+/// function in this file. A build script is compiled for the host, so
+/// `cfg!(windows)` would run this when cross-compiling *from* Windows to a
+/// non-MSVC target such as `x86_64-pc-windows-gnu`, which imports none of
+/// these DLLs.
+fn stage_msvc_runtime() {
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
+    if target_os != "windows" || target_env != "msvc" {
+        return;
+    }
+
+    let manifest_dir = PathBuf::from(
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set"),
+    );
+    const RUNTIME_DLLS: [&str; 4] = [
+        "vcruntime140.dll",
+        "vcruntime140_1.dll",
+        "msvcp140.dll",
+        "msvcp140_1.dll",
+    ];
+
+    // Declare inputs before any early return, so the build script's dependency
+    // set does not shrink between the first run and later ones.
+    for dll in RUNTIME_DLLS {
+        println!(
+            "cargo:rerun-if-changed={}",
+            manifest_dir.join(dll).display()
+        );
+    }
+
+    let arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| "x86_64".into());
+
+    // The DLLs have fixed names and land in the manifest dir, which is shared
+    // across targets, so "the files exist" says nothing about which
+    // architecture they are. Without the stamp, building x86_64 and then
+    // aarch64 in the same checkout ships x64 CRT DLLs inside an ARM64
+    // installer, which fails exactly like #657 on the user's machine.
+    //
+    // Architecture only. A VS toolset upgrade leaves the files in place and
+    // the stamp matching, so the previously staged DLLs are reused; delete
+    // them to force a refresh. Recording the source version here would fix
+    // that, at the cost of re-staging whenever the toolset moves.
+    //
+    // Deliberately NOT declared with rerun-if-changed. This build script
+    // writes the stamp, and declaring a path the script itself writes makes
+    // cargo re-run it on every single build. Measured on Windows: a warm
+    // `cargo check -p minutes-app` recompiled every time (8.6s) with the
+    // declaration, against 0 rebuilds (3.0s) without it. The DLL paths above
+    // are declared and already cover the cases that should re-trigger
+    // staging; the stamp is read, never watched.
+    let stamp_path = manifest_dir.join(".msvc-runtime-stage.stamp");
+
+    let staged = RUNTIME_DLLS.iter().all(|d| manifest_dir.join(d).exists());
+    let stamp_matches = std::fs::read_to_string(&stamp_path)
+        .is_ok_and(|recorded| recorded.trim() == stage_stamp(&arch));
+    if staged && stamp_matches {
+        return;
+    }
+
+    let Some(redist) = find_vc_redist_dir(&arch) else {
+        // Deliberately a warning, not a panic. The compiler toolset and the
+        // redistributable are separate Visual Studio components, so a Build
+        // Tools install without the recommended set has the linker and no
+        // `VC\Redist\MSVC\`. Tauri's unmatched-glob error follows this line
+        // in the log and this explains how to fix it.
+        println!(
+            "cargo:warning=Could not find the VC++ redistributable for {arch}. The Windows app \
+             needs vcruntime140/msvcp140 staged beside it or it will not start on a machine \
+             without the Visual C++ Redistributable (#657). Install the \
+             'MSVC v143 - VS 2022 C++ x64/x86 Redistributable' component (or \
+             Microsoft.VisualStudio.Component.VC.Redist.14.Latest)."
+        );
+        return;
+    };
+    let mut staged_all = true;
+    for dll in RUNTIME_DLLS {
+        let src = redist.join(dll);
+        if let Err(error) = std::fs::copy(&src, manifest_dir.join(dll)) {
+            staged_all = false;
+            println!(
+                "cargo:warning=failed to stage {} for the Windows bundle: {error}",
+                src.display()
+            );
+        }
+    }
+
+    // Only record the stamp once every file is in place, so a partial copy
+    // re-stages next build instead of being cached as complete.
+    if staged_all {
+        let _ = std::fs::write(&stamp_path, stage_stamp(&arch));
+    } else {
+        let _ = std::fs::remove_file(&stamp_path);
+    }
+}
+
+/// Identity of a staged runtime set: which architecture it was copied for.
+///
+/// Compared as text, so extending it later (toolset version, source path)
+/// simply invalidates every existing stamp and re-stages.
+fn stage_stamp(arch: &str) -> String {
+    format!("arch={arch}\n")
+}
+
+/// Newest `Microsoft.VC*.CRT` directory for `arch` from any installed Visual
+/// Studio.
+///
+/// Sorts by parsed version rather than path text: a plain path sort puts the
+/// edition segment ahead of the version, so a box with Community 14.44 and
+/// Professional 14.29 would pick Professional's older CRT.
+fn find_vc_redist_dir(arch: &str) -> Option<PathBuf> {
+    let redist_arch = match arch {
+        "x86_64" => "x64",
+        "aarch64" => "arm64",
+        "x86" => "x86",
+        _ => return None,
+    };
+    let roots = [
+        r"C:\Program Files\Microsoft Visual Studio",
+        r"C:\Program Files (x86)\Microsoft Visual Studio",
+    ];
+    let mut best: Option<(Vec<u32>, PathBuf)> = None;
+    for root in roots {
+        let Ok(years) = std::fs::read_dir(root) else {
+            continue;
+        };
+        for year in years.flatten() {
+            let Ok(editions) = std::fs::read_dir(year.path()) else {
+                continue;
+            };
+            for edition in editions.flatten() {
+                let msvc = edition.path().join("VC").join("Redist").join("MSVC");
+                let Ok(versions) = std::fs::read_dir(&msvc) else {
+                    continue;
+                };
+                for version in versions.flatten() {
+                    let parsed: Vec<u32> = version
+                        .file_name()
+                        .to_string_lossy()
+                        .split('.')
+                        .filter_map(|p| p.parse().ok())
+                        .collect();
+                    if parsed.is_empty() {
+                        continue;
+                    }
+                    let Ok(crt_dirs) = std::fs::read_dir(version.path().join(redist_arch)) else {
+                        continue;
+                    };
+                    for crt in crt_dirs.flatten() {
+                        let name = crt.file_name().to_string_lossy().to_string();
+                        // Accept any VC<major>.CRT so a future toolset (VC144)
+                        // is picked up instead of silently skipped.
+                        if !name.starts_with("Microsoft.VC") || !name.ends_with(".CRT") {
+                            continue;
+                        }
+                        if !crt.path().join("vcruntime140.dll").exists() {
+                            continue;
+                        }
+                        if best.as_ref().is_none_or(|(v, _)| parsed > *v) {
+                            best = Some((parsed.clone(), crt.path()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    best.map(|(_, p)| p)
+}
+
+/// Deployment target (`-target <arch>-apple-macos<min>`) for a bundled Swift
+/// helper.
+///
+/// `swiftc` ignores `MACOSX_DEPLOYMENT_TARGET` (unlike clang/ld), so without an
+/// explicit `-target` it stamps each helper's minimum-OS (`LC_BUILD_VERSION
+/// minos`) from the host SDK. On the `macos-latest` release runner that is a
+/// newer macOS than most users run, so dyld refuses to load the helper on
+/// older systems (issue #494: 0.22.0's `system_audio_record` was stamped minos
+/// 26.0 and crashed on macOS 15). Pin an explicit minimum instead.
+///
+/// The minimum is per-helper, set to the oldest macOS each one actually
+/// compiles against: `mic_check` uses only long-stable APIs (11.0);
+/// `system_audio_record` calls `AVCaptureDevice.DeviceType.microphone` and
+/// `calendar-events` calls `EKEventStore.requestFullAccessToEvents`, both
+/// macOS 14 APIs used unguarded, so those pin to 14.0. Their macOS-15-only
+/// paths (ScreenCaptureKit recording) remain weak-linked behind `@available` /
+/// `#available` guards, so the binaries load on 14+ and run on 15+.
+fn swift_deployment_target(min_macos: &str) -> String {
+    let target = std::env::var("TARGET").unwrap_or_default();
+    let arch = if target.starts_with("aarch64") {
+        "arm64"
+    } else {
+        "x86_64"
+    };
+    format!("{arch}-apple-macos{min_macos}")
+}
+
+/// Below this size the staged sidecar cannot be a real CLI binary (the real
+/// one is tens of MB; the placeholder is ~52 bytes).
+const MIN_REAL_CLI_SIDECAR_BYTES: u64 = 1_000_000;
+
+/// Ensure `bin/minutes-<target>` exists so Tauri's `externalBin` resolution
+/// succeeds during plain `cargo check` / `cargo clippy` runs that don't go
+/// through `scripts/build.sh`.
+///
+/// If the release CLI has been built (`target/release/minutes`), copy it. If
+/// not, write a non-empty placeholder. The placeholder is enough to satisfy
+/// Tauri's existence check at compile time for check/clippy runs.
+///
+/// Distributable bundles must never contain the placeholder. Release builds
+/// set `MINUTES_REQUIRE_REAL_CLI_SIDECAR=1`, which makes this step hard-fail
+/// instead of writing a placeholder, and re-stage over a stale placeholder
+/// left by an earlier check/clippy run (issue #324: the release workflow
+/// called `cargo tauri build` without building the CLI first, and every
+/// CI-built macOS bundle since v0.16.2 shipped the stub).
+fn stage_rust_sidecars() {
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os != "macos" {
+        return;
+    }
+
+    let manifest_dir = PathBuf::from(
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set"),
+    );
+    println!("cargo:rerun-if-env-changed=MINUTES_REQUIRE_REAL_CLI_SIDECAR");
+    let require_real = std::env::var("MINUTES_REQUIRE_REAL_CLI_SIDECAR")
+        .map(|v| v == "1" || v == "true")
+        .unwrap_or(false);
+    for name in [
+        "minutes",
+        "minutes-graph-worker",
+        "minutes-apple-speech-worker",
+    ] {
+        stage_rust_sidecar(&manifest_dir, name, require_real);
+    }
+}
+
+fn stage_rust_sidecar(manifest_dir: &Path, name: &str, require_real: bool) {
+    let target = std::env::var("TARGET").unwrap_or_else(|_| "unknown-target".into());
+    let bin_dir = manifest_dir.join("bin");
+    let staged = bin_dir.join(format!("{name}-{target}"));
+    println!("cargo:rerun-if-changed={}", staged.display());
+    if staged.exists() {
+        let staged_len = fs::metadata(&staged).map(|m| m.len()).unwrap_or(0);
+        if !require_real || staged_len >= MIN_REAL_CLI_SIDECAR_BYTES {
+            return;
+        }
+        // Required mode found a stale placeholder from an earlier
+        // check/clippy run: drop it and stage the real binary below.
+        fs::remove_file(&staged).expect("failed to remove stale placeholder sidecar");
+    }
+
+    fs::create_dir_all(&bin_dir).expect("failed to create sidecar bin dir");
+
+    // Prefer the built release CLI when present (developer ran
+    // `cargo build --release -p minutes-cli` first).
+    let repo_root = manifest_dir.join("../..");
+    let candidate_paths = [
+        repo_root
+            .join("target")
+            .join(&target)
+            .join("release")
+            .join(name),
+        repo_root.join("target/release").join(name),
+    ];
+    for candidate in candidate_paths.iter() {
+        if candidate.exists() {
+            fs::copy(candidate, &staged).expect("failed to copy Rust sidecar");
+            return;
+        }
+    }
+
+    if require_real {
+        panic!(
+            "MINUTES_REQUIRE_REAL_CLI_SIDECAR is set but no release {name} binary was found \
+             (looked at {candidate_paths:?}). Run `cargo build --release -p minutes-cli` before \
+             `cargo tauri build` so the bundle ships a working sidecar instead of a placeholder."
+        );
+    }
+
+    // Placeholder for check/clippy only. Distributable builds set
+    // MINUTES_REQUIRE_REAL_CLI_SIDECAR and hard-fail above instead.
+    println!(
+        "cargo:warning=No {name} release binary found; writing placeholder sidecar at {}. Run `cargo build --release -p minutes-cli` (or `scripts/build.sh`) before `cargo tauri build`.",
+        staged.display()
+    );
+    fs::write(
+        &staged,
+        format!("#!/bin/sh\necho '{name} placeholder' >&2\nexit 1\n"),
+    )
+    .expect("failed to write placeholder sidecar");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perm = fs::metadata(&staged)
+            .expect("metadata for placeholder sidecar")
+            .permissions();
+        perm.set_mode(0o755);
+        fs::set_permissions(&staged, perm).expect("chmod placeholder sidecar");
+    }
+}
+
+fn compile_mic_check_helper() {
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os != "macos" {
+        return;
+    }
+
+    let manifest_dir = PathBuf::from(
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set"),
+    );
+    let source = manifest_dir.join("src/mic_check.swift");
+    let bin_dir = manifest_dir.join("bin");
+    let binary = bin_dir.join("mic_check");
+    let target = std::env::var("TARGET").unwrap_or_else(|_| "unknown-target".into());
+    let target_binary = bin_dir.join(format!("mic_check-{}", target));
+
+    println!("cargo:rerun-if-changed={}", source.display());
+    std::fs::create_dir_all(&bin_dir).expect("failed to create helper bin dir");
+
+    let output = Command::new("swiftc")
+        .args(["-target", &swift_deployment_target("11.0")])
+        .arg(&source)
+        .arg("-o")
+        .arg(&binary)
+        .output()
+        .expect("failed to run swiftc for mic_check");
+
+    if !output.status.success() {
+        panic!(
+            "failed to compile mic_check.swift: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    std::fs::copy(&binary, &target_binary)
+        .expect("failed to copy target-specific mic_check helper");
+}
+
+fn compile_system_audio_helper() {
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os != "macos" {
+        return;
+    }
+
+    let manifest_dir = PathBuf::from(
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set"),
+    );
+    let source = manifest_dir.join("src/system_audio_record.swift");
+    let bin_dir = manifest_dir.join("bin");
+    let binary = bin_dir.join("system_audio_record");
+    let target = std::env::var("TARGET").unwrap_or_else(|_| "unknown-target".into());
+    let target_binary = bin_dir.join(format!("system_audio_record-{}", target));
+
+    println!("cargo:rerun-if-changed={}", source.display());
+    std::fs::create_dir_all(&bin_dir).expect("failed to create helper bin dir");
+
+    let output = Command::new("swiftc")
+        .args(["-parse-as-library"])
+        .args(["-target", &swift_deployment_target("14.0")])
+        .arg(&source)
+        .arg("-o")
+        .arg(&binary)
+        .output()
+        .expect("failed to run swiftc for system_audio_record");
+
+    if !output.status.success() {
+        panic!(
+            "failed to compile system_audio_record.swift: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    std::fs::copy(&binary, &target_binary)
+        .expect("failed to copy target-specific system_audio_record helper");
+}
+
+fn compile_calendar_helper() {
+    // The Swift EventKit helper (`calendar-events`) is the fast, non-intrusive
+    // path for reading Apple Calendar. Without it, callers fall through to
+    // AppleScript — which, since PR #164, returns empty unless Calendar.app
+    // is already running. Bundling the helper inside the signed .app means
+    // release DMG users get real calendar data regardless of Calendar.app state.
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os != "macos" {
+        return;
+    }
+
+    let manifest_dir = PathBuf::from(
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set"),
+    );
+    let repo_root = manifest_dir.join("../..");
+    let source = repo_root.join("scripts/calendar-events.swift");
+    let info_plist = repo_root.join("scripts/calendar-helper-Info.plist");
+    // Output goes to `bin/` (not `resources/`) so Tauri treats it as an
+    // externalBin. That way it lands at `Contents/MacOS/calendar-events`
+    // in the packaged .app and gets signed + notarized in lockstep with
+    // the main binary. Declaring it under `resources` in earlier
+    // releases placed it at `Contents/Resources/resources/calendar-events`
+    // unsigned, which failed notarization (see #183-followup).
+    let bin_dir = manifest_dir.join("bin");
+    let binary = bin_dir.join("calendar-events");
+    let target = std::env::var("TARGET").unwrap_or_else(|_| "unknown-target".into());
+    let target_binary = bin_dir.join(format!("calendar-events-{}", target));
+
+    println!("cargo:rerun-if-changed={}", source.display());
+    println!("cargo:rerun-if-changed={}", info_plist.display());
+
+    fs::create_dir_all(&bin_dir).expect("failed to create helper bin dir");
+
+    // Mirrors `scripts/build.sh` / `scripts/install-dev-app.sh`: `-sectcreate
+    // __TEXT __info_plist` embeds the plist so macOS can display the
+    // NSCalendarsFullAccessUsageDescription string on the EventKit prompt.
+    let output = Command::new("swiftc")
+        .arg("-O")
+        .args(["-target", &swift_deployment_target("14.0")])
+        .args(["-Xlinker", "-sectcreate"])
+        .args(["-Xlinker", "__TEXT"])
+        .args(["-Xlinker", "__info_plist"])
+        .arg("-Xlinker")
+        .arg(&info_plist)
+        .arg(&source)
+        .arg("-o")
+        .arg(&binary)
+        .output()
+        .expect("failed to run swiftc for calendar-events");
+
+    if !output.status.success() {
+        panic!(
+            "failed to compile calendar-events.swift: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    // Tauri's externalBin convention looks for `<base>-<target-triple>`,
+    // so copy the fresh build to the target-suffixed path alongside the
+    // base filename. Matches `compile_system_audio_helper` above.
+    fs::copy(&binary, &target_binary)
+        .expect("failed to copy target-specific calendar-events helper");
+}
+
+fn stage_assistant_skill_bundle() {
+    let manifest_dir = PathBuf::from(
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set"),
+    );
+    let repo_root = manifest_dir.join("../..");
+    let resources_root = manifest_dir
+        .join("resources")
+        .join("assistant-skill-bundle");
+
+    let sources = [
+        (
+            // Stage only first-party skills. `.agents/skills/` also holds local
+            // dev tooling (impeccable) that must not ship to users.
+            PathBuf::from("agents-skills").join("minutes"),
+            repo_root.join(".agents").join("skills").join("minutes"),
+        ),
+        (
+            PathBuf::from("opencode-skills"),
+            repo_root.join(".opencode").join("skills"),
+        ),
+        (
+            PathBuf::from("opencode-commands"),
+            repo_root.join(".opencode").join("commands"),
+        ),
+    ];
+
+    for (_, source) in &sources {
+        println!("cargo:rerun-if-changed={}", source.display());
+    }
+
+    if resources_root.exists() {
+        fs::remove_dir_all(&resources_root).expect("failed to clear staged assistant skill bundle");
+    }
+    fs::create_dir_all(&resources_root).expect("failed to create assistant skill bundle root");
+
+    for (relative_name, source) in &sources {
+        copy_dir_recursive(source, &resources_root.join(relative_name))
+            .unwrap_or_else(|error| panic!("failed to stage {}: {}", source.display(), error));
+    }
+}
+
+fn copy_dir_recursive(source: &Path, target: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(target)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = target.join(entry.file_name());
+        let metadata = entry.metadata()?;
+        if metadata.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else {
+            if let Some(parent) = to.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
+}

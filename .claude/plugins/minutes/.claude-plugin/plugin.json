@@ -1,0 +1,26 @@
+{
+  "name": "minutes",
+  "version": "0.21.1",
+  "description": "Conversation memory for AI assistants: record, transcribe, search meetings and voice memos. 24 skills + 1 agent + 2 hooks.",
+  "author": {
+    "name": "Mat Silverstein"
+  },
+  "homepage": "https://useminutes.app",
+  "repository": "https://github.com/silverstein/minutes",
+  "license": "MIT",
+  "keywords": [
+    "meeting",
+    "transcription",
+    "memory",
+    "voice-memo",
+    "whisper",
+    "conversation"
+  ],
+  "category": "productivity",
+  "mcpServers": {
+    "minutes": {
+      "command": "npx",
+      "args": ["-y", "minutes-mcp"]
+    }
+  }
+}

@@ -1,0 +1,269 @@
+{
+  "manifest_version": "0.3",
+  "name": "minutes",
+  "display_name": "Minutes Conversation Memory",
+  "description": "Free, open-source meeting memory for the AI tools you already use. Record and transcribe locally, keep your meetings as Markdown, and let Claude, Codex, or other connected assistants search the context you authorize.",
+  "long_description": "Minutes is free, open-source meeting memory for the AI tools you already use. Record meetings, voice memos, and dictation locally, then keep transcripts and notes as Markdown in `~/meetings/`. Policy-aware tools let Claude Desktop, Claude Code, Codex, Gemini CLI, Cursor, OpenCode, Pi, and MCP-compatible clients search the context you authorize. Restricted meetings are excluded from agent results by default; explicit access requires a trusted launch policy, a per-call request, and a durable audit record. Capture, transcription, and storage run locally. If you choose a cloud assistant or summarizer, the meeting context you authorize is sent to that provider. File-sync and backup services you configure have their own data boundaries.\n\n34 tools • 11 resources • Interactive MCP App dashboard • 6 prompt templates\n\nWhat you get:\n• Opt-in automatic native recording for selected Teams and Zoom desktop calls on macOS, with manual Stop suppression and a hang-up countdown.\n• All 25 bundled Minutes skills in the embedded Claude Code Terminal alongside personal development skills.\n• On-device transcription and optional on-device summarization. Engine selection depends on the platform, build, installed models, and configuration.\n• Re-run the AI pass on edited meetings and memos with preview-first output, backup-on-apply writes, and edit-preserving merges.\n• A native chat panel that recalls policy-authorized meetings, with token streaming and read-only policy-bound search.\n• Dictation that types straight at your cursor, on the same local engine.\n• Live sessions that promote into diarized, summarized meetings when you stop.\n• Consent provenance in every file, and sensitivity gating agents must respect.\n• Diarized speaker labels, structured action items and decisions, and policy-safe search over owned markdown. Cross-meeting relationship answers are rebuilt from bounded live policy-authorized snapshots; compatibility-only derived insight and annotation reads still fail explicitly until their source provenance can be revalidated.\n\n**Getting set up.** Minutes keeps everything on your own machine, so it needs the Minutes engine installed locally. The extension downloads it for you the first time it runs, and most people never have to think about it.\n\nIf it cannot reach the internet, or you are on an unusual platform, install it yourself. On macOS and Windows the easiest way is the free, open-source Minutes desktop app at https://useminutes.app, which includes the engine. On Linux, install the command line tool from the same page.\n\nEither way the extension always starts and lists its tools, so if something is missing it will tell you exactly what to do.",
+  "version": "0.30.10",
+  "author": {
+    "name": "Mat Silverstein",
+    "url": "https://github.com/silverstein"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/silverstein/minutes"
+  },
+  "homepage": "https://useminutes.app",
+  "documentation": "https://useminutes.app/for-agents",
+  "support": "https://github.com/silverstein/minutes/discussions",
+  "license": "MIT",
+  "icon": "icon.png",
+  "keywords": [
+    "meetings",
+    "transcription",
+    "voice-memo",
+    "whisper",
+    "parakeet",
+    "memory",
+    "search",
+    "action-items",
+    "decisions",
+    "mcp-apps",
+    "interactive",
+    "speaker-diarization",
+    "privacy",
+    "local",
+    "offline",
+    "meeting-notes",
+    "voice",
+    "relationship-intelligence"
+  ],
+  "tools": [
+    {
+      "name": "start_recording",
+      "description": "Start recording audio from the default input device"
+    },
+    {
+      "name": "stop_recording",
+      "description": "Stop the current recording and process it"
+    },
+    {
+      "name": "get_status",
+      "description": "Check if a recording is currently in progress"
+    },
+    {
+      "name": "list_processing_jobs",
+      "description": "List background processing jobs for recent recordings"
+    },
+    {
+      "name": "list_meetings",
+      "description": "List recent normal meetings and voice memos; restricted items are excluded unless an explicit logged override is enabled and requested"
+    },
+    {
+      "name": "search_meetings",
+      "description": "Search normal meeting transcripts and voice memos; restricted items are excluded unless an explicit logged override is enabled and requested"
+    },
+    {
+      "name": "get_meeting",
+      "description": "Get a normal meeting transcript; restricted meetings return a content-free stub unless an explicit logged override is enabled and requested"
+    },
+    {
+      "name": "activity_summary",
+      "description": "Summarize desktop context bound to one exact normal meeting source"
+    },
+    {
+      "name": "search_context",
+      "description": "Search desktop-context events bound to one exact normal meeting source"
+    },
+    {
+      "name": "get_moment",
+      "description": "Show the local desktop-context rewind bound to one exact normal meeting source"
+    },
+    {
+      "name": "get_screen_context",
+      "description": "Retrieve bounded, verified screenshots bound to one exact normal meeting source"
+    },
+    {
+      "name": "process_audio",
+      "description": "On macOS and Linux, process bounded inbox or Downloads WAV audio; compressed/private containers and Windows fail closed without reading audio; retained library recordings are unavailable"
+    },
+    {
+      "name": "add_note",
+      "description": "Add a timestamped note to the current active recording; existing meeting files are not mutable from this assistant tool"
+    },
+    {
+      "name": "consistency_report",
+      "description": "Flag conflicting decisions and stale commitments"
+    },
+    {
+      "name": "get_person_profile",
+      "description": "Build a profile from policy-authorized meetings within supported corpus bounds"
+    },
+    {
+      "name": "research_topic",
+      "description": "Research a topic across policy-authorized meetings within supported corpus bounds"
+    },
+    {
+      "name": "start_dictation",
+      "description": "Start dictation mode — speech to clipboard and daily notes"
+    },
+    {
+      "name": "stop_dictation",
+      "description": "Stop dictation mode"
+    },
+    {
+      "name": "track_commitments",
+      "description": "List open and stale commitments, optionally filtered by person"
+    },
+    {
+      "name": "relationship_map",
+      "description": "Rank relationships from the bounded process-private policy-safe graph projection"
+    },
+    {
+      "name": "list_voices",
+      "description": "List enrolled voice profiles for speaker identification"
+    },
+    {
+      "name": "confirm_speaker",
+      "description": "Compatibility name only: agent-controlled speaker mutation is unavailable; use the Minutes app or human CLI"
+    },
+    {
+      "name": "get_meeting_insights",
+      "description": "Query decisions, commitments, and questions extracted from meetings; each insight records a path to its source meeting, that path is resolved to a meeting in the live corpus and the resolved meeting is re-verified against live sensitivity policy before release, and withheld records are reported as a partial view"
+    },
+    {
+      "name": "start_live_transcript",
+      "description": "Start a live transcript session for real-time meeting transcription"
+    },
+    {
+      "name": "read_live_transcript",
+      "description": "Read utterances from the active live transcript with optional cursor or time window"
+    },
+    {
+      "name": "start_copilot",
+      "description": "Start the independent real-time copilot for a goal and observe its CLI nudge stream"
+    },
+    {
+      "name": "stop_copilot",
+      "description": "Stop the active real-time copilot without changing recording or live transcription"
+    },
+    {
+      "name": "copilot_status",
+      "description": "Read current copilot session and provider health from the CLI status surface"
+    },
+    {
+      "name": "read_copilot_nudges",
+      "description": "Read observed copilot nudges incrementally by cursor or time window"
+    },
+    {
+      "name": "ingest_meeting",
+      "description": "Extract facts from a meeting and update the knowledge base (person profiles, log, index)"
+    },
+    {
+      "name": "resummarize_meeting",
+      "description": "Re-run the AI pass on an edited meeting or memo, previewing by default and preserving user edits"
+    },
+    {
+      "name": "knowledge_status",
+      "description": "Show the current state of the knowledge base — configuration, adapter, people count, log entries"
+    },
+    {
+      "name": "add_agent_annotation",
+      "description": "Append attributed agent commentary as an agent.annotation event, never editing meeting markdown or frontmatter (allowlist-gated by ~/.minutes/agents.allow)"
+    },
+    {
+      "name": "get_agent_annotations",
+      "description": "Compatibility name only: unavailable because an annotation's source pointer and body are both author-supplied, so revalidating the pointer cannot bound what the body discloses"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "meeting_prep",
+      "description": "Prepare for an upcoming meeting",
+      "arguments": [
+        "meeting_topic"
+      ],
+      "text": "Search my past meetings about ${arguments.meeting_topic}. Find relevant decisions, open action items, and context I should review before the meeting."
+    },
+    {
+      "name": "weekly_review",
+      "description": "Review this week's meetings",
+      "text": "List my meetings from the past week and summarize key decisions, action items, and commitments. Flag anything overdue."
+    },
+    {
+      "name": "find_action_items",
+      "description": "Find action items assigned to someone",
+      "arguments": [
+        "person"
+      ],
+      "text": "Search for all open action items assigned to ${arguments.person}. Show what was committed, when, and in which meeting."
+    },
+    {
+      "name": "person_briefing",
+      "description": "Get a briefing on a person before a meeting",
+      "arguments": [
+        "name"
+      ],
+      "text": "Build a profile for ${arguments.name} from policy-authorized meetings within supported corpus bounds. What topics do we discuss? What commitments are open? What decisions have we made together?"
+    },
+    {
+      "name": "topic_research",
+      "description": "Research a topic across policy-authorized meetings within supported corpus bounds",
+      "arguments": [
+        "topic"
+      ],
+      "text": "Research ${arguments.topic} across policy-authorized meetings within supported corpus bounds. Show related decisions, open follow-ups, and which meetings discussed it most."
+    },
+    {
+      "name": "start_meeting",
+      "description": "Start recording a meeting",
+      "arguments": [
+        "title"
+      ],
+      "text": "Start recording a meeting titled '${arguments.title}'. I'll transcribe it locally when we're done."
+    }
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "crates/mcp/dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/crates/mcp/dist/index.js"
+      ],
+      "env": {
+        "MINUTES_HOME": "${user_config.minutes_home}",
+        "MEETINGS_DIR": "${user_config.meetings_dir}"
+      }
+    }
+  },
+  "user_config": {
+    "meetings_dir": {
+      "type": "directory",
+      "title": "Meetings Directory",
+      "description": "Where meeting transcripts and voice memos are saved",
+      "required": false,
+      "default": "${HOME}/meetings"
+    },
+    "minutes_home": {
+      "type": "directory",
+      "title": "Minutes Data Directory",
+      "description": "Where Minutes stores its configuration, logs, and PID files",
+      "required": false,
+      "default": "${HOME}/.minutes"
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  },
+  "privacy_policies": [
+    "https://useminutes.app/privacy"
+  ]
+}

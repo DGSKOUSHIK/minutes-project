@@ -1,0 +1,401 @@
+{
+  "generatedAt": "2026-10-22",
+  "installCommand": "npx minutes-mcp",
+  "documentationUrl": "https://useminutes.app/for-agents",
+  "supportUrl": "https://github.com/silverstein/minutes/discussions",
+  "tools": [
+    {
+      "name": "start_recording",
+      "description": "Start recording audio from the default input device",
+      "group": "Recording",
+      "anchorId": "tool-start-recording",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-start-recording"
+    },
+    {
+      "name": "stop_recording",
+      "description": "Stop the current recording and process it",
+      "group": "Recording",
+      "anchorId": "tool-stop-recording",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-stop-recording"
+    },
+    {
+      "name": "get_status",
+      "description": "Check if a recording is currently in progress",
+      "group": "Recording",
+      "anchorId": "tool-get-status",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-get-status"
+    },
+    {
+      "name": "list_processing_jobs",
+      "description": "List background processing jobs for recent recordings",
+      "group": "Recording",
+      "anchorId": "tool-list-processing-jobs",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-list-processing-jobs"
+    },
+    {
+      "name": "list_meetings",
+      "description": "List recent normal meetings and voice memos; restricted items are excluded unless an explicit logged override is enabled and requested",
+      "group": "Search and recall",
+      "anchorId": "tool-list-meetings",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-list-meetings"
+    },
+    {
+      "name": "search_meetings",
+      "description": "Search normal meeting transcripts and voice memos; restricted items are excluded unless an explicit logged override is enabled and requested",
+      "group": "Search and recall",
+      "anchorId": "tool-search-meetings",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-search-meetings"
+    },
+    {
+      "name": "get_meeting",
+      "description": "Get a normal meeting transcript; restricted meetings return a content-free stub unless an explicit logged override is enabled and requested",
+      "group": "Search and recall",
+      "anchorId": "tool-get-meeting",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-get-meeting"
+    },
+    {
+      "name": "activity_summary",
+      "description": "Summarize desktop context bound to one exact normal meeting source",
+      "group": "Search and recall",
+      "anchorId": "tool-activity-summary",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-activity-summary"
+    },
+    {
+      "name": "search_context",
+      "description": "Search desktop-context events bound to one exact normal meeting source",
+      "group": "Search and recall",
+      "anchorId": "tool-search-context",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-search-context"
+    },
+    {
+      "name": "get_moment",
+      "description": "Show the local desktop-context rewind bound to one exact normal meeting source",
+      "group": "Search and recall",
+      "anchorId": "tool-get-moment",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-get-moment"
+    },
+    {
+      "name": "get_screen_context",
+      "description": "Retrieve bounded, verified screenshots bound to one exact normal meeting source",
+      "group": "Search and recall",
+      "anchorId": "tool-get-screen-context",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-get-screen-context"
+    },
+    {
+      "name": "process_audio",
+      "description": "On macOS and Linux, process bounded inbox or Downloads WAV audio; compressed/private containers and Windows fail closed without reading audio; retained library recordings are unavailable",
+      "group": "Notes and processing",
+      "anchorId": "tool-process-audio",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-process-audio"
+    },
+    {
+      "name": "add_note",
+      "description": "Add a timestamped note to the current active recording; existing meeting files are not mutable from this assistant tool",
+      "group": "Notes and processing",
+      "anchorId": "tool-add-note",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-add-note"
+    },
+    {
+      "name": "consistency_report",
+      "description": "Flag conflicting decisions and stale commitments",
+      "group": "People and relationships",
+      "anchorId": "tool-consistency-report",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-consistency-report"
+    },
+    {
+      "name": "get_person_profile",
+      "description": "Build a profile from policy-authorized meetings within supported corpus bounds",
+      "group": "People and relationships",
+      "anchorId": "tool-get-person-profile",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-get-person-profile"
+    },
+    {
+      "name": "research_topic",
+      "description": "Research a topic across policy-authorized meetings within supported corpus bounds",
+      "group": "Search and recall",
+      "anchorId": "tool-research-topic",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-research-topic"
+    },
+    {
+      "name": "start_dictation",
+      "description": "Start dictation mode — speech to clipboard and daily notes",
+      "group": "Live and dictation",
+      "anchorId": "tool-start-dictation",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-start-dictation"
+    },
+    {
+      "name": "stop_dictation",
+      "description": "Stop dictation mode",
+      "group": "Live and dictation",
+      "anchorId": "tool-stop-dictation",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-stop-dictation"
+    },
+    {
+      "name": "track_commitments",
+      "description": "List open and stale commitments, optionally filtered by person",
+      "group": "People and relationships",
+      "anchorId": "tool-track-commitments",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-track-commitments"
+    },
+    {
+      "name": "relationship_map",
+      "description": "Rank relationships from the bounded process-private policy-safe graph projection",
+      "group": "People and relationships",
+      "anchorId": "tool-relationship-map",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-relationship-map"
+    },
+    {
+      "name": "list_voices",
+      "description": "List enrolled voice profiles for speaker identification",
+      "group": "Voice and speaker ID",
+      "anchorId": "tool-list-voices",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-list-voices"
+    },
+    {
+      "name": "confirm_speaker",
+      "description": "Compatibility name only: agent-controlled speaker mutation is unavailable; use the Minutes app or human CLI",
+      "group": "Voice and speaker ID",
+      "anchorId": "tool-confirm-speaker",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-confirm-speaker"
+    },
+    {
+      "name": "get_meeting_insights",
+      "description": "Query decisions, commitments, and questions extracted from meetings; each insight records a path to its source meeting, that path is resolved to a meeting in the live corpus and the resolved meeting is re-verified against live sensitivity policy before release, and withheld records are reported as a partial view",
+      "group": "Insights",
+      "anchorId": "tool-get-meeting-insights",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-get-meeting-insights"
+    },
+    {
+      "name": "start_live_transcript",
+      "description": "Start a live transcript session for real-time meeting transcription",
+      "group": "Live and dictation",
+      "anchorId": "tool-start-live-transcript",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-start-live-transcript"
+    },
+    {
+      "name": "read_live_transcript",
+      "description": "Read utterances from the active live transcript with optional cursor or time window",
+      "group": "Live and dictation",
+      "anchorId": "tool-read-live-transcript",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-read-live-transcript"
+    },
+    {
+      "name": "start_copilot",
+      "description": "Start the independent real-time copilot for a goal and observe its CLI nudge stream",
+      "group": "Real-time Coach",
+      "anchorId": "tool-start-copilot",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-start-copilot"
+    },
+    {
+      "name": "stop_copilot",
+      "description": "Stop the active real-time copilot without changing recording or live transcription",
+      "group": "Real-time Coach",
+      "anchorId": "tool-stop-copilot",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-stop-copilot"
+    },
+    {
+      "name": "copilot_status",
+      "description": "Read current copilot session and provider health from the CLI status surface",
+      "group": "Real-time Coach",
+      "anchorId": "tool-copilot-status",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-copilot-status"
+    },
+    {
+      "name": "read_copilot_nudges",
+      "description": "Read observed copilot nudges incrementally by cursor or time window",
+      "group": "Real-time Coach",
+      "anchorId": "tool-read-copilot-nudges",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-read-copilot-nudges"
+    },
+    {
+      "name": "ingest_meeting",
+      "description": "Extract facts from a meeting and update the knowledge base (person profiles, log, index)",
+      "group": "Insights",
+      "anchorId": "tool-ingest-meeting",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-ingest-meeting"
+    },
+    {
+      "name": "resummarize_meeting",
+      "description": "Re-run the AI pass on an edited meeting or memo, previewing by default and preserving user edits",
+      "group": "Notes and processing",
+      "anchorId": "tool-resummarize-meeting",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-resummarize-meeting"
+    },
+    {
+      "name": "knowledge_status",
+      "description": "Show the current state of the knowledge base — configuration, adapter, people count, log entries",
+      "group": "Insights",
+      "anchorId": "tool-knowledge-status",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-knowledge-status"
+    },
+    {
+      "name": "add_agent_annotation",
+      "description": "Append attributed agent commentary as an agent.annotation event, never editing meeting markdown or frontmatter (allowlist-gated by ~/.minutes/agents.allow)",
+      "group": "Agent Event Bus",
+      "anchorId": "tool-add-agent-annotation",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-add-agent-annotation"
+    },
+    {
+      "name": "get_agent_annotations",
+      "description": "Compatibility name only: unavailable because an annotation's source pointer and body are both author-supplied, so revalidating the pointer cannot bound what the body discloses",
+      "group": "Agent Event Bus",
+      "anchorId": "tool-get-agent-annotations",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#tool-get-agent-annotations"
+    }
+  ],
+  "resources": [
+    {
+      "name": "Minutes Dashboard",
+      "uri": "ui://minutes/dashboard",
+      "description": "Interactive meeting dashboard and detail viewer",
+      "group": "Dashboard",
+      "anchorId": "resource-minutes-dashboard",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#resource-minutes-dashboard"
+    },
+    {
+      "name": "recent_meetings",
+      "uri": "minutes://meetings/recent",
+      "description": "List of recent meetings and memos",
+      "group": "Meetings",
+      "anchorId": "resource-recent-meetings",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#resource-recent-meetings"
+    },
+    {
+      "name": "recording_status",
+      "uri": "minutes://status",
+      "description": "Current recording status",
+      "group": "Status",
+      "anchorId": "resource-recording-status",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#resource-recording-status"
+    },
+    {
+      "name": "open_actions",
+      "uri": "minutes://actions/open",
+      "description": "All open action items across meetings",
+      "group": "Memory",
+      "anchorId": "resource-open-actions",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#resource-open-actions"
+    },
+    {
+      "name": "recent_events",
+      "uri": "minutes://events/recent",
+      "description": "Recent pipeline events with meeting-derived content withheld until source policy provenance is available",
+      "group": "Status",
+      "anchorId": "resource-recent-events",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#resource-recent-events"
+    },
+    {
+      "name": "agent_annotations",
+      "uri": "minutes://events/agent-annotations",
+      "description": "Agent annotations are withheld until their source policy provenance can be revalidated",
+      "group": "Status",
+      "anchorId": "resource-agent-annotations",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#resource-agent-annotations"
+    },
+    {
+      "name": "live_events",
+      "uri": "minutes://events/live",
+      "description": "Live events are currently withheld because raw cursors can reveal restricted activity; reads return a constant unavailable response.",
+      "group": "Live",
+      "anchorId": "resource-live-events",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#resource-live-events"
+    },
+    {
+      "name": "live_copilot",
+      "uri": "minutes://live/copilot",
+      "description": "Current copilot state and latest observed nudge. Subscribe for notifications/resources/updated or poll this URI; MCP only controls and observes the independent minutes copilot engine.",
+      "group": "Live",
+      "anchorId": "resource-live-copilot",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#resource-live-copilot"
+    },
+    {
+      "name": "recent-ideas",
+      "uri": "minutes://ideas/recent",
+      "description": "Recent voice memos and ideas captured from any device (last 14 days)",
+      "group": "Memory",
+      "anchorId": "resource-recent-ideas",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#resource-recent-ideas"
+    },
+    {
+      "name": "live_events_since_seq",
+      "uri": "minutes://events/live{?since_seq,limit}",
+      "description": "Live event cursor reads are currently withheld because raw cursors can reveal restricted activity; reads return a constant unavailable response.",
+      "group": "Live",
+      "anchorId": "resource-live-events-since-seq",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#resource-live-events-since-seq"
+    },
+    {
+      "name": "meeting",
+      "uri": "minutes://meetings/{slug}",
+      "description": "Get a specific meeting by its filename slug",
+      "group": "Meetings",
+      "anchorId": "resource-meeting",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#resource-meeting"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "meeting_prep",
+      "description": "Prepare for an upcoming meeting",
+      "arguments": [
+        "meeting_topic"
+      ],
+      "text": "Search my past meetings about ${arguments.meeting_topic}. Find relevant decisions, open action items, and context I should review before the meeting.",
+      "group": "Prep",
+      "anchorId": "prompt-meeting-prep",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#prompt-meeting-prep"
+    },
+    {
+      "name": "weekly_review",
+      "description": "Review this week's meetings",
+      "text": "List my meetings from the past week and summarize key decisions, action items, and commitments. Flag anything overdue.",
+      "group": "Review",
+      "anchorId": "prompt-weekly-review",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#prompt-weekly-review"
+    },
+    {
+      "name": "find_action_items",
+      "description": "Find action items assigned to someone",
+      "arguments": [
+        "person"
+      ],
+      "text": "Search for all open action items assigned to ${arguments.person}. Show what was committed, when, and in which meeting.",
+      "group": "Review",
+      "anchorId": "prompt-find-action-items",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#prompt-find-action-items"
+    },
+    {
+      "name": "person_briefing",
+      "description": "Get a briefing on a person before a meeting",
+      "arguments": [
+        "name"
+      ],
+      "text": "Build a profile for ${arguments.name} from policy-authorized meetings within supported corpus bounds. What topics do we discuss? What commitments are open? What decisions have we made together?",
+      "group": "Prep",
+      "anchorId": "prompt-person-briefing",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#prompt-person-briefing"
+    },
+    {
+      "name": "topic_research",
+      "description": "Research a topic across policy-authorized meetings within supported corpus bounds",
+      "arguments": [
+        "topic"
+      ],
+      "text": "Research ${arguments.topic} across policy-authorized meetings within supported corpus bounds. Show related decisions, open follow-ups, and which meetings discussed it most.",
+      "group": "Prep",
+      "anchorId": "prompt-topic-research",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#prompt-topic-research"
+    },
+    {
+      "name": "start_meeting",
+      "description": "Start recording a meeting",
+      "arguments": [
+        "title"
+      ],
+      "text": "Start recording a meeting titled '${arguments.title}'. I'll transcribe it locally when we're done.",
+      "group": "Capture",
+      "anchorId": "prompt-start-meeting",
+      "docsUrl": "https://useminutes.app/docs/mcp/tools#prompt-start-meeting"
+    }
+  ]
+}

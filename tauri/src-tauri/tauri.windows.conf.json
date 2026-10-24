@@ -1,0 +1,21 @@
+{
+  "bundle": {
+    "targets": [
+      "nsis"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "resources": [
+      "resources/assistant-skill-bundle/**/*",
+      "vcruntime140*.dll",
+      "msvcp140*.dll"
+    ]
+  }
+}

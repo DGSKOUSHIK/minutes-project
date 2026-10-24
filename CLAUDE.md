@@ -1,0 +1,375 @@
+# CLAUDE.md — Minutes
+
+> Your AI remembers the conversations you authorize.
+
+## Project Overview
+
+**Minutes** — open-source, privacy-first conversation memory layer for AI assistants. Captures meetings, voice memos, and brain dumps, transcribes locally with whisper.cpp, diarizes speakers, and outputs searchable markdown with structured action items and decisions. Built with Rust + Tauri v2 + Node.js (MCP).
+
+**Four input modes, one pipeline:**
+- **Live recording**: `minutes record` / `minutes stop` — for meetings, calls, conversations
+- **Live transcript**: `minutes live` / `minutes stop` — real-time transcription with delta reads for AI coaching mid-meeting
+- **Notetaking**: `minutes note "important point"` — timestamped annotations during recording
+- **Folder watcher**: `minutes watch` — auto-processes voice memos from iPhone/iCloud
+
+## Quick Start
+
+```bash
+cd ~/Sites/minutes
+cargo build                          # Build Rust workspace
+cargo test -p minutes-core --no-default-features  # Fast tests (no whisper model)
+cargo run --bin minutes -- setup --model tiny      # Download whisper model
+cargo run --bin minutes -- setup --diarization     # Download speaker diarization models (~34MB)
+cargo run --bin minutes -- record    # Start recording
+cargo run --bin minutes -- stop      # Stop and process
+```
+
+## Full Build (CLI + Tauri App)
+
+```bash
+./scripts/build.sh                   # Builds everything and installs CLI
+./scripts/build.sh --install         # Same + copies .app to /Applications
+./scripts/install-dev-app.sh         # Canonical signed dev app install to ~/Applications/Minutes Dev.app
+# Or manually:
+export CXXFLAGS="-I$(xcrun --show-sdk-path)/usr/include/c++/v1"
+cargo build --release -p minutes-cli           # CLI binary
+cargo tauri build --bundles app                # Tauri .app bundle
+rm -f ~/.local/bin/minutes && cp target/release/minutes ~/.local/bin/minutes # Install CLI (rm first: in-place cp over a running binary invalidates its signature -> SIGKILL on every launch)
+open target/release/bundle/macos/Minutes.app   # Launch app
+```
+
+**Hard rule for macOS desktop packaging and dogfooding:**
+
+- If the work touches TCC-sensitive features, do **not** keep replacing `/Applications/Minutes.app` with local rebuilds.
+- Use `./scripts/install-dev-app.sh` and test `~/Applications/Minutes Dev.app`.
+- If a stable local codesigning identity exists, export `MINUTES_DEV_SIGNING_IDENTITY` before running the script. This is machine-local — set it in your shell profile or a local (untracked) env file to your **own** signing identity; do not hardcode a specific identity here, since exporting an identity whose cert isn't in the local keychain makes the signing step abort. Without it, the script falls back to ad-hoc signing.
+- Example (substitute your own identity):
+
+```bash
+export MINUTES_DEV_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+./scripts/install-dev-app.sh
+```
+
+**IMPORTANT**: After any code change, you must rebuild ALL affected targets:
+- CLI changes: `cargo build --release -p minutes-cli && rm -f ~/.local/bin/minutes && cp target/release/minutes ~/.local/bin/minutes` (always rm first; never cp over the live binary)
+- Tauri changes: `cargo tauri build --bundles app` then relaunch the appropriate app bundle
+- TCC-sensitive desktop work (hotkeys, Screen Recording, Input Monitoring, Accessibility): `./scripts/install-dev-app.sh`
+- MCP server changes: `cd crates/mcp && npm run build` (compiles TS server + builds UI, then restart MCP client sessions)
+- MCP App UI only: `cd crates/mcp && npm run build:ui` (rebuild just the dashboard HTML)
+- All Rust + app: `./scripts/build.sh` (add `--install` to copy .app to /Applications)
+- **Don't forget the MCP server** — it's TypeScript, not Rust. `./scripts/build.sh` does NOT rebuild it. Always run `cd crates/mcp && npm run build` after touching `crates/mcp/src/index.ts` or `crates/mcp/ui/`.
+
+## Desktop Identity Rules
+
+For macOS permission-sensitive development, there are now two distinct desktop app identities:
+
+- Production app:
+  - name: `Minutes.app`
+  - bundle id: `com.useminutes.desktop`
+  - canonical install path: `/Applications/Minutes.app`
+- Development app:
+  - name: `Minutes Dev.app`
+  - bundle id: `com.useminutes.desktop.dev`
+  - canonical install path: `~/Applications/Minutes Dev.app`
+
+Use the dev app for any work involving:
+
+- dictation hotkeys / Input Monitoring
+- Screen Recording prompts
+- AppleScript / Accessibility automation
+- any repeated TCC permission prompt investigation
+
+Do not trust results from:
+
+- `./Minutes.app`
+- raw `target/debug/minutes-app`
+- raw `target/release/minutes-app`
+- repo-local bundle outputs launched directly from `target/`
+
+Those identities are not stable enough for TCC debugging.
+
+Native hotkey sanity check:
+
+```bash
+./scripts/diagnose-desktop-hotkey.sh "$HOME/Applications/Minutes Dev.app"
+```
+
+See [docs/development/desktop-development.md](/docs/development/desktop-development.md) for the full workflow.
+
+For dictation shortcut work:
+
+- prioritize the `Standard shortcut (recommended)` path first
+- treat the raw-key `Caps Lock` / `fn` path as advanced and permission-heavy
+- do not call the raw-key path “done” just because the monitor is active; require visible feedback or logged event delivery
+
+### Open-source contributor note
+
+This repo is public, so local scripts must not assume the maintainer's Apple
+certificate or local notarization credentials.
+
+- `./scripts/install-dev-app.sh` works without Apple credentials by falling
+  back to ad-hoc signing
+- for more stable TCC-sensitive testing, contributors can export
+  `MINUTES_DEV_SIGNING_IDENTITY` to any consistent local codesigning identity
+- release signing / notarization is maintainer-only and should be configured
+  explicitly via environment variables, not by hardcoded defaults in scripts
+
+## Pre-Commit Checklist
+
+**Full table lives in [docs/checklists/pre-commit.md](docs/checklists/pre-commit.md).** Read it before any commit that touches Rust, the MCP server, the frontend, or release surfaces — it covers manifest sync, MCPB bundle guards, fmt/clippy/test, Unix-only-API gating, feature-stub parity, site release constants, skill compiler outputs, the toolchain pin, and UI render verification.
+
+Two traps that bite hardest (the rest are in the doc):
+- **Toolchain pin.** `command -v cargo` must match `rustup which cargo`. If Homebrew rust shadows the rustup proxy, `rust-toolchain.toml` is silently ignored and your local clippy/rustfmt drift from CI's. Fix once: prepend rustup's bin dir to PATH or `brew uninstall rust`.
+- **UI render verification.** Type checks and Rust unit tests don't catch UI render bugs. Any change to `tauri/src/index.html`, any new Tauri `cmd_*`, or any modal/overlay shift requires building the dev app and click-testing in `~/Applications/Minutes Dev.app`.
+
+## Release Checklist
+
+**Full procedure lives in [docs/release/procedure.md](docs/release/procedure.md).** Walk through every step in order when shipping. Highlights:
+- All 6 version sources must match (`Cargo.toml`, `crates/cli/Cargo.toml`, `tauri/src-tauri/tauri.conf.json`, `crates/mcp/package.json`, `crates/sdk/package.json`, `manifest.json`) plus the version string in `crates/mcp/src/index.ts`.
+- `crates/whisper-guard/` ships on its own cadence — bump + publish independently if it changed since last whisper-guard publish.
+- Push to `main` and wait for CI green **before** tagging. Create the GitHub release as a `--draft`, wait for release workflows, then `--draft=false`. Never `git tag` locally.
+- After tagging: upload `.mcpb`, publish npm packages (sdk first, then mcp — and `crates/mcp/package.json` must depend on the npm version of `minutes-sdk`, not `file:../sdk`), verify the Cloudflare Pages site deploy after the validated `site/` changes reach `main`, and update the Homebrew tap if CLI changed.
+
+## Design System
+
+Always read `DESIGN.md` before making any visual or UI decisions.
+All font choices, colors, spacing, border radius, and aesthetic direction are defined there.
+Do not deviate without explicit user approval.
+
+Key rules:
+- Landing site defaults to **light cream** (#F8F4ED). Dark mode is opt-in via system preference.
+- Accent: **coral** (#C96B4E) in light, **green** (#30D158) in dark. Used sparingly — 5 specific spots only.
+- Headings: **Instrument Serif**. Body: **Instrument Sans**. UI/labels/transcript: **Geist Mono**.
+- No gradients, no decorative elements, no illustrations. Information density is the aesthetic.
+- The transcript output card (diarized speaker labels + action items in Geist Mono) is the primary product demo.
+- In QA or design review: flag any code that introduces fonts, colors, or radius values not defined in DESIGN.md.
+
+## GitHub Discussions
+
+Discussions are enabled at `silverstein/minutes` as the community Q&A surface. Issues are for bugs and feature requests; Discussions are for usage questions, setup help, and show-and-tell.
+
+**When to check Discussions:**
+- Before closing an issue that's really a question — convert it to a Discussion instead (`gh issue transfer` or manually)
+- When a bug report smells like a usage question (wrong device, config confusion, platform quirk) — answer and suggest reposting as a Discussion
+- After shipping a release — scan Q&A for questions the release may have answered, and reply with the fix/upgrade path
+
+**When to point users to Discussions:**
+- README and error messages that suggest "ask for help" should link to Discussions, not Issues
+- Issue templates should nudge Q&A to Discussions
+
+**Quick commands:**
+```bash
+gh api repos/silverstein/minutes/discussions --jq '.[].title'   # List recent
+gh issue list --label question                                    # Find issues that should be discussions
+```
+
+## Contributor PRs
+
+**Always merge contributor PRs through GitHub's merge flow.** Use `gh pr merge <number>` or the GitHub merge button. Never cherry-pick/rebase to main manually and then close the PR via API. That makes GitHub display the PR as "Closed" (red) instead of "Merged" (purple), which looks like a rejection to the contributor.
+
+If there are merge conflicts, resolve them on the PR branch and merge through GitHub. If you need to rebase, push to the PR branch first, then merge.
+
+**Never rewrite a contributor's PR without communicating first.** If their approach needs changes, iterate via review comments on their PR. Don't ship a competing implementation silently.
+
+## Project Structure
+
+```
+minutes/
+├── PLAN.md                    # Master plan (survives compaction — read this first)
+├── CLAUDE.md                  # This file
+├── Cargo.toml                 # Workspace root
+├── crates/
+│   ├── core/src/              # 82 Rust modules — the engine (the tree below is a
+│   │                          # partial map; run `ls crates/core/src/*.rs` for the
+│   │                          # full list before concluding something is missing)
+│   │   ├── capture.rs         # Audio capture (cpal), device categorization, loopback detection
+│   │   ├── resample.rs        # Shared mono-downmix + 16kHz decimation resampler (used by capture + streaming)
+│   │   ├── transcribe.rs      # Batch transcription: whisper.cpp. Retained Parakeet config resolves to Whisper until secure transport exists
+│   │   ├── diarize.rs         # Speaker diarization + attribution types (pyannote-rs, or energy-based from per-source stems)
+│   │   ├── summarize.rs       # LLM summarization + speaker mapping (ureq HTTP client)
+│   │   ├── voice.rs           # Voice profile storage and matching (voices.db, enrollment, cosine similarity)
+│   │   ├── pipeline.rs        # Orchestrates the full flow + structured extraction
+│   │   ├── notes.rs           # Timestamped notetaking during/after recordings
+│   │   ├── watch.rs           # Folder watcher (settle delay, dedup, lock)
+│   │   ├── markdown.rs        # YAML frontmatter + shared parsing utilities
+│   │   ├── search.rs          # Walk-dir search + action item queries
+│   │   ├── config.rs          # TOML config with compiled defaults
+│   │   ├── pid.rs             # PID file lifecycle (flock atomic)
+│   │   ├── events.rs          # Append-only JSONL event log for agent reactivity
+│   │   ├── device_monitor.rs  # Audio device change detection (CoreAudio listener + auto-reconnect)
+│   │   ├── streaming_whisper.rs # Progressive transcription (partial results every 2s)
+│   │   ├── streaming.rs       # Streaming audio capture (AudioStream, MultiAudioStream for multi-source)
+│   │   ├── logging.rs         # Structured JSON logging
+│   │   ├── error.rs           # Per-module error types (thiserror)
+│   │   ├── calendar.rs        # Calendar integration (upcoming meetings)
+│   │   ├── daily_notes.rs     # Daily note append for dictation/memos
+│   │   ├── dictation.rs       # Dictation mode (speak → clipboard + daily note)
+│   │   ├── live_transcript.rs # Live transcript mode (real-time JSONL + WAV, delta reads, AI coaching)
+│   │   ├── health.rs          # System health checks (model, mic, disk, watcher)
+│   │   ├── hotkey_macos.rs    # macOS global hotkey registration
+│   │   ├── screen.rs          # Screen context capture (screenshots)
+│   │   ├── vad.rs             # Voice activity detection
+│   │   ├── vault.rs           # Obsidian/Logseq vault sync
+│   │   ├── knowledge.rs       # Knowledge base adapters (wiki/PARA/Obsidian) + fact writing
+│   │   ├── knowledge_extract.rs # Structured fact extraction from meeting frontmatter
+│   │   ├── desktop_control.rs # Desktop automation (AppleScript, tray interactions)
+│   │   ├── graph.rs           # Conversation knowledge graph (people, decisions, commitments)
+│   │   ├── jobs.rs            # Background job queue for async processing
+│   │   └── palette.rs         # Command palette definitions and matching
+│   ├── whisper-guard/          # Standalone anti-hallucination toolkit (segment dedup, silence strip, whisper params)
+│   ├── cli/                   # CLI binary — 58 commands
+│   ├── reader/                # Lightweight read-only meeting parser (no audio deps)
+│   ├── assets/                # Bundled assets (demo.wav)
+│   └── mcp/                   # MCP server — 35 tools + 8 resources + MCP App dashboard
+│       └── ui/                # Interactive dashboard (vanilla TS, builds to single-file HTML)
+├── site/                      # Landing page (Next.js + Remotion demo player)
+├── tauri/                     # Tauri v2 menu bar app + singleton AI Assistant
+├── .claude/plugins/minutes/   # Claude Code plugin — 23 skills + 1 agent + 2 hooks
+├── .agents/skills/minutes/    # Portable skills mirror (Codex, Gemini, other AGENTS-aware agents)
+├── .opencode/skills/          # OpenCode-native flattened skills mirror + runtime helpers
+├── .opencode/commands/        # OpenCode /minutes-* slash-command wrappers
+└── tests/integration/         # Integration tests (including real whisper tests)
+```
+
+## Documentation Structure
+
+Documentation is organized under `docs/` by purpose. See [docs/README.md](docs/README.md) for the index.
+
+- `docs/architecture/` — Technical subsystems (transcription engines, audio capture, config)
+- `docs/checklists/` — Pre-commit, compatibility, and regression checklists
+- `docs/development/` — Developer guides, build status, and technical HOWTOs
+- `docs/investigations/` — One-off handoff notes, evaluations, and debugging investigations
+- `docs/release/` — Release process, platforms, channels, and versioned release notes
+- `docs/integration/` — Agent integration guides
+- `docs/plans/`, `docs/designs/`, `docs/rfcs/`, `docs/eval/` — Already organized by type
+
+New docs go in the folder matching their purpose. Root-level `PLAN.md` is the master architecture; all other plans live in `docs/plans/`.
+
+## Development Commands
+
+```bash
+# Build (macOS 26 needs C++ include path for whisper.cpp)
+export CXXFLAGS="-I$(xcrun --show-sdk-path)/usr/include/c++/v1"
+cargo build
+
+# Test
+cargo test -p minutes-core --no-default-features   # Fast (no whisper model)
+cargo test -p minutes-core                          # Full (needs tiny model)
+
+# Lint
+cargo clippy --all --no-default-features -- -D warnings
+cargo fmt --all -- --check
+
+# MCP server (TS server + interactive dashboard UI)
+cd crates/mcp && npm install && npm run build       # tsc + vite single-file build
+npx vitest run                                      # 30 reader.ts unit tests
+node test/mcp_tools_test.mjs                        # 8 MCP integration tests
+```
+
+## Key Architecture Decisions
+
+- **Rust** for the engine — single 6.7MB binary, cross-platform, fast
+- **whisper-rs** (whisper.cpp) for transcription (default) — local, Apple Silicon optimized, params match whisper-cli defaults (best_of=5, entropy/logprob thresholds)
+- **parakeet.cpp selection is retained but unavailable** — legacy Parakeet config remains parseable, but batch selection resolves to Whisper until secure byte transport exists. See `docs/architecture/parakeet.md` for the dormant contract.
+- **ffmpeg preferred for compressed audio decoding, bounded worker as fallback** — shells out to ffmpeg for the named compressed formats (m4a/mp3/ogg/webm/mp4/mov/aac) and consumes bounded 16 kHz mono PCM. ffmpeg stays preferred because Symphonia's AAC decoder produces subtly different samples that trigger whisper hallucination loops on non-English audio (issue #21). When ffmpeg is absent, decoding falls back to Symphonia running inside the bounded audio-decode worker child (`crates/core/src/audio_decode_worker.rs`), default-on via `transcription.compressed_decode_fallback`. There is still deliberately no *in-process* Symphonia fallback: its container probing can allocate attacker-declared tables before resource limits run, so the ceiling binds before the decoder reads an attacker-controlled byte. Linux and Windows install it from the parent (`pre_exec` / a Job Object at `CREATE_SUSPENDED`); Darwin rejects an absolute `RLIMIT_AS` below its pre-`main()` shared-cache baseline, so there the child installs a measured baseline-plus-budget ceiling itself before any decode, the same way `graph_worker` does. WAV uses the bounded in-process decoder.
+- **Silero VAD** (via whisper-rs) — ML-based voice activity detection integrated directly into whisper's transcription params. Prevents hallucination loops by skipping silence segments. Auto-downloaded during `minutes setup`.
+- **whisper-guard** crate — standalone anti-hallucination toolkit extracted from minutes-core. 6-layer defense: Silero VAD gating, no_speech probability filtering (>80% = skip), consecutive segment dedup (3+ similar collapsed), interleaved A/B/A/B pattern detection, foreign-script hallucination detection, language-agnostic noise marker collapse (`[Śmiech]`, `[music]`, `[risas]`, etc.), trailing noise trimming. Publishable to crates.io independently.
+- **nnnoiseless** (optional) — pure Rust RNNoise port for noise reduction. Behind `denoise` feature flag, controlled by `config.transcription.noise_reduction`. Processes at 48kHz with first-frame priming. Batch path only (not streaming).
+- **pyannote-rs** for speaker diarization — native Rust, ONNX models (~34MB), no Python. Works in CLI, Tauri desktop app, and via MCP. Behind the `diarize` Cargo feature flag.
+- **Speaker attribution** — confidence-aware system mapping SPEAKER_X labels to real names. Four levels: L0 (deterministic 1-on-1 via calendar+identity), L1 (LLM suggestions capped at Medium confidence), L2 (voice enrollment in `voices.db`), L3 (confirmed-only learning). Wrong names are worse than anonymous — only High-confidence attributions rewrite transcript labels. `speaker_map` in YAML frontmatter is the canonical attribution data. Voice profiles are stored durably in `~/.minutes/voices.db`; relationship graphs are process-private projections rematerialized from authorized sources.
+- **Windowed-sinc resampler** (32-tap Hann) — alias-free 44100→16000 downsampling for WAV inputs
+- **ureq** for HTTP — pure Rust, no secrets in process args (replaced curl)
+- **fs2 flock** for PID files — atomic check-and-write, prevents TOCTOU races
+- **Tauri v2** for desktop app — shares `minutes-core` with CLI, ~10MB
+- **Markdown + YAML frontmatter** for storage — universal, works with everything
+- **Structured extraction** — action items + decisions in frontmatter as queryable YAML
+- **No API keys needed** — Claude summarizes conversationally via MCP tools
+- **Live transcript** — per-utterance whisper → JSONL append with PidGuard flock for session exclusivity. Delta reads via line cursor or wall-clock duration. Optional WAV preservation for post-meeting reprocessing. Agent-agnostic: JSONL readable by any agent, MCP tools for Claude, CLAUDE.md context injection for Codex/Gemini/OpenCode.
+
+## Already Built — check here before proposing to build it
+
+The module tree above covers 34 of 82 core modules. Several substantial
+capabilities are not in it, and have been independently re-proposed as "new
+work" more than once. Grep before you design.
+
+| Capability | Where | How to check it is live |
+|---|---|---|
+| Custom vocabulary (people, orgs, acronyms) | `vocabulary.rs`, `~/.minutes/vocabulary.toml` | `minutes vocabulary list` |
+| Decode-time lexical biasing | `pipeline.rs::build_decode_hints` → `transcribe.rs::whisper_initial_prompt` → `set_initial_prompt` | vocabulary entries appear in the whisper prompt |
+| Hint evaluation with false-positive scoring | `autoresearch.rs::run_decode_hint_eval_corpus`, `scripts/run_proper_name_eval.sh` | baseline vs candidate WER, `max_wer_regression`, required/forbidden terms |
+| Dictation benchmark corpus | `scripts/run_dictation_benchmark.sh`, `tests/eval/fixtures/` | |
+| In-process SOTA engine (sherpa-onnx / parakeet-v3) | `sherpa_engine.rs`, feature `engine-sherpa` | `minutes setup --sherpa`, `engine = "sherpa"` |
+| Name correction / entity resolution | `name_correction.rs`, `person_identity.rs`, `entity_cluster.rs` | |
+| Bounded child processes, policy filesystem | `bounded_child.rs` (3k lines), `policy_fs.rs` (4.5k lines) | |
+| Search index, context store, desktop context | `search_index.rs`, `context_store.rs`, `desktop_context.rs` | |
+
+**Two traps that produced wrong conclusions in practice:**
+
+- `minutes transcribe` calls `DecodeHints::default()`, so it gets **no**
+  vocabulary biasing. Only the `process`/pipeline path does. Benchmarking name
+  accuracy through `transcribe` measures the unbiased path and tells you
+  nothing about what users of `process` get.
+- Reading one function is not reading the behavior. `effective_batch_engine`
+  looks like a silent engine swap until you read its caller, which warns. Check
+  callers before concluding.
+
+## Key Patterns
+
+- All audio processing is local (whisper.cpp + pyannote-rs + Silero VAD). WAV decoding is in-process; importing M4A, MP3, OGG, WebM, MP4, MOV, or AAC uses local ffmpeg when installed, otherwise the bounded audio-decode worker.
+- Claude summarizes via MCP when the user asks (no API key needed)
+- Optional automated summarization fully on-device via Apple Foundation Models (macOS 26+, `engine = "apple"`; preferred by `"auto"` when available — see docs/architecture/apple-foundation-models.md), via Ollama (local), Mistral, or cloud LLMs
+- Config at `~/.config/minutes/config.toml` (optional, compiled defaults work)
+- Tauri assistant uses a singleton workspace at `~/.minutes/assistant/`
+- `CLAUDE.md` and `AGENTS.md` hold matching general assistant instructions; `CURRENT_MEETING.md` is the active meeting focus for "Discuss with AI"
+- Meetings: `~/meetings/` | Voice memos: `~/meetings/memos/`
+- `0600` permissions on all output (sensitive content)
+- PID file + flock for recording state (`~/.minutes/recording.pid`)
+- Watcher: settle delay, move to `processed/`/`failed/`, lock file
+- JSON structured logging: `~/.minutes/logs/minutes.log`
+- 100% doc comment coverage on all pub functions
+
+## Test Coverage
+
+~290 tests total:
+- 85 whisper-guard tests (72 unit + 7 integration + 6 doctest) covering resample, normalize, strip_silence, dedup_segments, dedup_interleaved, collapse_noise_markers, strip_foreign_script, trim_trailing_noise, clean_transcript, clean_segments, CleanOptions toggles + keep_dedup_annotations, CleanStats summary, fork-user integration path, idempotency, pathological inputs, and known-limitation regression guards
+- 130 core unit tests (all modules including screen, calendar, config, watch, streaming whisper, vault, dictation, live_transcript, health, vad, hotkey, device_monitor, diarize)
+- 10 integration tests (pipeline, permissions, collisions, search filters)
+- 33 Tauri unit tests (commands, call detection, call capture)
+- 11 CLI tests
+- 6 reader crate tests (search, parse)
+- 30 reader.ts unit tests (vitest — frontmatter parsing, listing, search, actions, profiles; reader lives in crates/sdk/src/reader.ts)
+- 8 MCP integration tests (CLI JSON output, TypeScript compilation)
+- 5 hook unit tests (post-record hook: 4 guard tests + 1 nudge test)
+
+## Claude Ecosystem Integration
+
+- **MCP Server**: 35 tools + 8 resources for Claude Desktop / Cowork / Dispatch (`npx minutes-mcp` for zero-install)
+- **Claude Code Plugin**: 23 skills + meeting-analyst agent + SessionStart + PostToolUse hooks
+- **Interactive meeting lifecycle**: `/minutes-brief` → `/minutes-prep` → record → `/minutes-tag` → `/minutes-debrief` → `/minutes-mirror` → `/minutes-weekly` with skill chaining via `.brief.md` / `.prep.md` files; `/minutes-graph` for cross-meeting entity queries
+- **Conversational summarization**: Claude reads transcripts via MCP, no API key needed
+- **Auto-tagging + alerts**: PostToolUse hook tags meetings with git repo, checks for decision conflicts, surfaces overdue action items, nudges `/minutes-debrief` + `/minutes-tag`
+- **Proactive reminders**: SessionStart hook checks calendar for upcoming meetings and recommends `/minutes-brief` (fast) or `/minutes-prep` (goal-setting) based on time-to-meeting
+- **Portable skills**: `.agents/skills/minutes/` mirrors all 23 skills for Codex, Gemini, and other AGENTS-aware agents, while `.opencode/skills/` + `.opencode/commands/` gives OpenCode native skill discovery and `/minutes-*` slash commands. Both use `$MINUTES_SKILLS_ROOT` instead of `${CLAUDE_PLUGIN_ROOT}` and keep CLI-only speaker confirmation (no desktop app references). Runtime helpers at `_runtime/hooks/lib/` must stay in sync with `.claude/plugins/minutes/hooks/lib/`.
+- **Desktop assistant**: Tauri AI Assistant is a singleton session that can switch focus into a selected meeting without spawning parallel assistant workspaces
+- **Live coaching**: Tauri Live Mode toggle starts real-time transcription; the assistant workspace `CLAUDE.md` and `AGENTS.md` auto-update so the connected Recall session, Claude Desktop/Code, or any other agent can read the live JSONL file and coach mid-meeting. There is no dedicated transcript/coaching panel in Tauri v1; the coaching happens through the assistant chat surface.
+
+## Proven Decisions (do not re-litigate)
+
+Three decisions with incident history behind them. Each has a primary control
+in code/tests — these lines are pointers, not the enforcement.
+
+- **A wrong rewrite or merge is worse than none.** Applies to speaker names,
+  entity resolution, and any automated identity/text rewriting: only
+  high-confidence results may rewrite user-visible data; uncertain results stay
+  anonymous/unmerged. Proven by the "Every Name, Right" epic
+  (docs/plans/every-name-right-2026-06-11.md, the #385 fix series) and enforced
+  by the proper-name regression evals.
+- **Recording must never be degraded by an optional consumer.** Copilot
+  streams, live sidecars, coaching surfaces, and any other listener are
+  failure-isolated from capture: if they wedge or die, recording and WAV
+  preservation continue. Defined in RFC 0004 (copilot-realtime-stream,
+  failure-isolation boundary); enforced by the capture-reliability invariant
+  suites in minutes-core (consumer isolation, stop-deadline WAV preservation).
+- **Auto-update stays off** until a hosted release manifest and rollback UX
+  exist. Decision record: docs/investigations/auto-update-evaluation.md. Do not
+  wire updaters into the desktop app before those preconditions are met.

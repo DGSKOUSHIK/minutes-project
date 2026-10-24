@@ -1,0 +1,61 @@
+import type { MetadataRoute } from "next";
+
+export const dynamic = "force-static";
+
+const BASE_URL = "https://useminutes.app";
+
+const routes = [
+  "/",
+  "/compare",
+  "/compare/fathom-vs-minutes",
+  "/compare/fireflies-vs-minutes",
+  "/compare/granola-vs-minutes",
+  "/compare/hyprnote-vs-minutes",
+  "/compare/krisp-vs-minutes",
+  "/compare/macwhisper-vs-minutes",
+  "/compare/otter-vs-minutes",
+  "/compare/superwhisper-vs-minutes",
+  "/docs",
+  "/docs/agent-integrations",
+  "/docs/errors",
+  "/docs/mcp/tools",
+  "/docs/using-minutes",
+  "/dojo",
+  "/for-agents",
+  "/proof",
+  "/resources",
+  "/resources/ai-notetakers-attorney-client-privilege",
+  "/resources/best-local-speech-to-text",
+  "/resources/hipaa-compliant-ai-note-taker",
+  "/resources/hipaa-compliant-transcription",
+  "/resources/how-to-cancel-fireflies-ai",
+  "/resources/is-it-legal-to-record-a-meeting",
+  "/resources/best-mcp-meeting-memory-tools",
+  "/resources/best-meeting-tools-for-claude-code-and-codex",
+  "/resources/is-fireflies-ai-hipaa-compliant",
+  "/resources/is-granola-hipaa-compliant",
+  "/resources/is-fireflies-ai-safe",
+  "/resources/is-otter-ai-hipaa-compliant",
+  "/resources/legal-transcription-software",
+  "/resources/local-dictation-macos",
+  "/resources/meeting-minutes-template",
+  "/resources/open-source-alternatives-to-granola-ai",
+  "/resources/remove-ai-notetaker-bots-from-meetings",
+  "/resources/remove-fireflies-ai-from-teams",
+  "/resources/remove-fireflies-ai-from-zoom",
+  "/resources/remove-otter-ai-from-zoom",
+  "/resources/stop-fireflies-from-joining-meetings",
+  "/resources/turn-off-built-in-ai-notetakers",
+  "/security",
+  "/writing",
+  "/writing/governance-built-in-not-retrofitted",
+  "/writing/whisper-cpp-vs-parakeet-cpp",
+] as const;
+
+export default function sitemap(): MetadataRoute.Sitemap {
+  return routes.map((route) => ({
+    url: `${BASE_URL}${route}`,
+    changeFrequency: "weekly",
+    priority: route === "/" ? 1 : 0.7,
+  }));
+}

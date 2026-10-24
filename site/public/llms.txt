@@ -1,0 +1,177 @@
+# minutes
+
+> Generated file. Do not edit by hand.
+> Source: manifest.json + crates/mcp/src/index.ts + site/lib/skills-catalog.json
+> Last generated: 2026-10-22
+
+Minutes is free, open-source meeting memory for the AI tools you already use. Record meetings, voice memos, and dictation locally, then keep transcripts and notes as Markdown in `~/meetings/`. Policy-aware tools let Claude Desktop, Claude Code, Codex, Gemini CLI, Cursor, OpenCode, Pi, and MCP-compatible clients search the context you authorize. Restricted meetings are excluded from agent results by default; explicit access requires a trusted launch policy, a per-call request, and a durable audit record. Capture, transcription, and storage run locally. If you choose a cloud assistant or summarizer, the meeting context you authorize is sent to that provider. File-sync and backup services you configure have their own data boundaries.
+
+## Key Facts
+
+- License: MIT
+- Languages: Rust (core engine), TypeScript (MCP server)
+- Platforms: darwin, win32, linux
+- Version: 0.30.10
+- Source: https://github.com/silverstein/minutes
+- Website: https://useminutes.app
+- Privacy: https://useminutes.app/privacy
+
+## For AI Agents
+
+minutes exposes a standard MCP server with 34 tools, 11 resources, and 6 prompt templates. Any MCP-compatible client can use it as a conversation memory layer.
+
+## Choose Your Surface
+
+- MCP server — When: User has Claude Desktop, Codex, Gemini CLI, Cursor, or any MCP client. Install: `npx minutes-mcp` Best for: Best for agent-first search, recall, and meeting-memory workflows.
+- CLI — When: User wants terminal-first recording, search, import, and vault sync. Install: `brew tap silverstein/tap && brew install minutes` Best for: Best for local operator workflows and scripting.
+- Claude Code plugin — When: User works in Claude Code and wants meeting lifecycle skills and proactive hooks. Install: `claude plugin marketplace add silverstein/minutes` Best for: Best for workflow guidance, prep, debrief, and meeting coaching.
+- Pi coding agent — When: User works in Pi or wants Minutes to use pi as an opt-in local summarization agent. Install: `pi` Best for: Pi users who want the same local meeting memory without a Pi-specific skill export.
+- Desktop app — When: User wants a menu bar app with one-click recording, Recall, and artifact drafting. Install: `brew install --cask silverstein/tap/minutes` Best for: Best for first recording, live capture, and post-meeting artifact work.
+
+Recommended install:
+
+```json
+{
+  "mcpServers": {
+    "minutes": {
+      "command": "npx",
+      "args": ["minutes-mcp"]
+    }
+  }
+}
+```
+
+## MCP Tools
+
+- `start_recording` — Start recording audio from the default input device Docs: https://useminutes.app/docs/mcp/tools#tool-start-recording
+- `stop_recording` — Stop the current recording and process it Docs: https://useminutes.app/docs/mcp/tools#tool-stop-recording
+- `get_status` — Check if a recording is currently in progress Docs: https://useminutes.app/docs/mcp/tools#tool-get-status
+- `list_processing_jobs` — List background processing jobs for recent recordings Docs: https://useminutes.app/docs/mcp/tools#tool-list-processing-jobs
+- `list_meetings` — List recent normal meetings and voice memos; restricted items are excluded unless an explicit logged override is enabled and requested Docs: https://useminutes.app/docs/mcp/tools#tool-list-meetings
+- `search_meetings` — Search normal meeting transcripts and voice memos; restricted items are excluded unless an explicit logged override is enabled and requested Docs: https://useminutes.app/docs/mcp/tools#tool-search-meetings
+- `get_meeting` — Get a normal meeting transcript; restricted meetings return a content-free stub unless an explicit logged override is enabled and requested Docs: https://useminutes.app/docs/mcp/tools#tool-get-meeting
+- `activity_summary` — Summarize desktop context bound to one exact normal meeting source Docs: https://useminutes.app/docs/mcp/tools#tool-activity-summary
+- `search_context` — Search desktop-context events bound to one exact normal meeting source Docs: https://useminutes.app/docs/mcp/tools#tool-search-context
+- `get_moment` — Show the local desktop-context rewind bound to one exact normal meeting source Docs: https://useminutes.app/docs/mcp/tools#tool-get-moment
+- `get_screen_context` — Retrieve bounded, verified screenshots bound to one exact normal meeting source Docs: https://useminutes.app/docs/mcp/tools#tool-get-screen-context
+- `process_audio` — On macOS and Linux, process bounded inbox or Downloads WAV audio; compressed/private containers and Windows fail closed without reading audio; retained library recordings are unavailable Docs: https://useminutes.app/docs/mcp/tools#tool-process-audio
+- `add_note` — Add a timestamped note to the current active recording; existing meeting files are not mutable from this assistant tool Docs: https://useminutes.app/docs/mcp/tools#tool-add-note
+- `consistency_report` — Flag conflicting decisions and stale commitments Docs: https://useminutes.app/docs/mcp/tools#tool-consistency-report
+- `get_person_profile` — Build a profile from policy-authorized meetings within supported corpus bounds Docs: https://useminutes.app/docs/mcp/tools#tool-get-person-profile
+- `research_topic` — Research a topic across policy-authorized meetings within supported corpus bounds Docs: https://useminutes.app/docs/mcp/tools#tool-research-topic
+- `start_dictation` — Start dictation mode — speech to clipboard and daily notes Docs: https://useminutes.app/docs/mcp/tools#tool-start-dictation
+- `stop_dictation` — Stop dictation mode Docs: https://useminutes.app/docs/mcp/tools#tool-stop-dictation
+- `track_commitments` — List open and stale commitments, optionally filtered by person Docs: https://useminutes.app/docs/mcp/tools#tool-track-commitments
+- `relationship_map` — Rank relationships from the bounded process-private policy-safe graph projection Docs: https://useminutes.app/docs/mcp/tools#tool-relationship-map
+- `list_voices` — List enrolled voice profiles for speaker identification Docs: https://useminutes.app/docs/mcp/tools#tool-list-voices
+- `confirm_speaker` — Compatibility name only: agent-controlled speaker mutation is unavailable; use the Minutes app or human CLI Docs: https://useminutes.app/docs/mcp/tools#tool-confirm-speaker
+- `get_meeting_insights` — Query decisions, commitments, and questions extracted from meetings; each insight records a path to its source meeting, that path is resolved to a meeting in the live corpus and the resolved meeting is re-verified against live sensitivity policy before release, and withheld records are reported as a partial view Docs: https://useminutes.app/docs/mcp/tools#tool-get-meeting-insights
+- `start_live_transcript` — Start a live transcript session for real-time meeting transcription Docs: https://useminutes.app/docs/mcp/tools#tool-start-live-transcript
+- `read_live_transcript` — Read utterances from the active live transcript with optional cursor or time window Docs: https://useminutes.app/docs/mcp/tools#tool-read-live-transcript
+- `start_copilot` — Start the independent real-time copilot for a goal and observe its CLI nudge stream Docs: https://useminutes.app/docs/mcp/tools#tool-start-copilot
+- `stop_copilot` — Stop the active real-time copilot without changing recording or live transcription Docs: https://useminutes.app/docs/mcp/tools#tool-stop-copilot
+- `copilot_status` — Read current copilot session and provider health from the CLI status surface Docs: https://useminutes.app/docs/mcp/tools#tool-copilot-status
+- `read_copilot_nudges` — Read observed copilot nudges incrementally by cursor or time window Docs: https://useminutes.app/docs/mcp/tools#tool-read-copilot-nudges
+- `ingest_meeting` — Extract facts from a meeting and update the knowledge base (person profiles, log, index) Docs: https://useminutes.app/docs/mcp/tools#tool-ingest-meeting
+- `resummarize_meeting` — Re-run the AI pass on an edited meeting or memo, previewing by default and preserving user edits Docs: https://useminutes.app/docs/mcp/tools#tool-resummarize-meeting
+- `knowledge_status` — Show the current state of the knowledge base — configuration, adapter, people count, log entries Docs: https://useminutes.app/docs/mcp/tools#tool-knowledge-status
+- `add_agent_annotation` — Append attributed agent commentary as an agent.annotation event, never editing meeting markdown or frontmatter (allowlist-gated by ~/.minutes/agents.allow) Docs: https://useminutes.app/docs/mcp/tools#tool-add-agent-annotation
+- `get_agent_annotations` — Compatibility name only: unavailable because an annotation's source pointer and body are both author-supplied, so revalidating the pointer cannot bound what the body discloses Docs: https://useminutes.app/docs/mcp/tools#tool-get-agent-annotations
+
+## MCP Resources
+
+- `ui://minutes/dashboard` — Interactive meeting dashboard and detail viewer Docs: https://useminutes.app/docs/mcp/tools#resource-minutes-dashboard
+- `minutes://meetings/recent` — List of recent meetings and memos Docs: https://useminutes.app/docs/mcp/tools#resource-recent-meetings
+- `minutes://status` — Current recording status Docs: https://useminutes.app/docs/mcp/tools#resource-recording-status
+- `minutes://actions/open` — All open action items across meetings Docs: https://useminutes.app/docs/mcp/tools#resource-open-actions
+- `minutes://events/recent` — Recent pipeline events with meeting-derived content withheld until source policy provenance is available Docs: https://useminutes.app/docs/mcp/tools#resource-recent-events
+- `minutes://events/agent-annotations` — Agent annotations are withheld until their source policy provenance can be revalidated Docs: https://useminutes.app/docs/mcp/tools#resource-agent-annotations
+- `minutes://events/live` — Live events are currently withheld because raw cursors can reveal restricted activity; reads return a constant unavailable response. Docs: https://useminutes.app/docs/mcp/tools#resource-live-events
+- `minutes://live/copilot` — Current copilot state and latest observed nudge. Subscribe for notifications/resources/updated or poll this URI; MCP only controls and observes the independent minutes copilot engine. Docs: https://useminutes.app/docs/mcp/tools#resource-live-copilot
+- `minutes://ideas/recent` — Recent voice memos and ideas captured from any device (last 14 days) Docs: https://useminutes.app/docs/mcp/tools#resource-recent-ideas
+- `minutes://events/live{?since_seq,limit}` — Live event cursor reads are currently withheld because raw cursors can reveal restricted activity; reads return a constant unavailable response. Docs: https://useminutes.app/docs/mcp/tools#resource-live-events-since-seq
+- `minutes://meetings/{slug}` — Get a specific meeting by its filename slug Docs: https://useminutes.app/docs/mcp/tools#resource-meeting
+
+## Prompt Templates
+
+- `meeting_prep` — Prepare for an upcoming meeting Docs: https://useminutes.app/docs/mcp/tools#prompt-meeting-prep
+- `weekly_review` — Review this week's meetings Docs: https://useminutes.app/docs/mcp/tools#prompt-weekly-review
+- `find_action_items` — Find action items assigned to someone Docs: https://useminutes.app/docs/mcp/tools#prompt-find-action-items
+- `person_briefing` — Get a briefing on a person before a meeting Docs: https://useminutes.app/docs/mcp/tools#prompt-person-briefing
+- `topic_research` — Research a topic across policy-authorized meetings within supported corpus bounds Docs: https://useminutes.app/docs/mcp/tools#prompt-topic-research
+- `start_meeting` — Start recording a meeting Docs: https://useminutes.app/docs/mcp/tools#prompt-start-meeting
+
+## Claude Code Plugin Skills
+
+Workflow-level skills that wrap MCP tools into operator motions. Install in Claude Code via `claude plugin marketplace add silverstein/minutes` then `/plugin install minutes@minutes`. The same skills ship as a portable pack at `.agents/skills/minutes/` for Codex / Gemini CLI and at `.opencode/skills/` + `.opencode/commands/` for OpenCode.
+
+- `/minutes-video-review` — Turn a Loom, ScreenPal, or local walkthrough video into a durable artifact bundle for agent review. Category: Artifacts. Example: `/minutes-video-review https://go.screenpal.com/watch/...`. Docs: https://useminutes.app/for-agents#minutes-video-review
+- `/minutes-cleanup` — Archive or delete old recordings when storage starts piling up. Category: Capture. Example: `/minutes-cleanup`. Docs: https://useminutes.app/for-agents#minutes-cleanup
+- `/minutes-list` — Browse recent meetings and voice memos when you need to find the right artifact first. Category: Capture. Example: `/minutes-list`. Docs: https://useminutes.app/for-agents#minutes-list
+- `/minutes-note` — Drop a timestamped note into the current recording or annotate a past one. Category: Capture. Example: `/minutes-note Alex wants monthly billing`. Docs: https://useminutes.app/for-agents#minutes-note
+- `/minutes-recap` — Get a same-day digest across policy-authorized meetings and voice memos. Category: Capture. Example: `/minutes-recap`. Docs: https://useminutes.app/for-agents#minutes-recap
+- `/minutes-record` — Start or stop a meeting, call, or voice memo recording. Category: Capture. Example: `/minutes-record`. Docs: https://useminutes.app/for-agents#minutes-record
+- `/minutes-setup` — Walk a first-time user through getting Minutes ready to record. Category: Capture. Example: `/minutes-setup`. Docs: https://useminutes.app/for-agents#minutes-setup
+- `/minutes-verify` — Health-check the install, models, mic, and stale state before trusting it in production. Category: Capture. Example: `/minutes-verify`. Docs: https://useminutes.app/for-agents#minutes-verify
+- `/minutes-mirror` — Review your own talk-time, hedging, and performance patterns across meetings. Category: Coaching. Example: `/minutes-mirror`. Docs: https://useminutes.app/for-agents#minutes-mirror
+- `/minutes-tag` — Label a meeting outcome in five seconds so later coaching gets smarter. Category: Coaching. Example: `/minutes-tag won`. Docs: https://useminutes.app/for-agents#minutes-tag
+- `/minutes-graph` — Rank relationships, inspect commitments, confirm aliases, build a person profile, or research a topic. Category: Intelligence. Example: `/minutes-graph profile Alex from my normal meeting history`. Docs: https://useminutes.app/for-agents#minutes-graph
+- `/minutes-ideas` — Surface recent voice memos and loose ideas captured from any device. Category: Knowledge. Example: `/minutes-ideas`. Docs: https://useminutes.app/for-agents#minutes-ideas
+- `/minutes-ingest` — Extract structured facts from meetings into an external knowledge base. Category: Knowledge. Example: `/minutes-ingest`. Docs: https://useminutes.app/for-agents#minutes-ingest
+- `/minutes-lint` — Audit meeting memory for contradictions, stale commitments, and decision conflicts. Category: Knowledge. Example: `/minutes-lint`. Docs: https://useminutes.app/for-agents#minutes-lint
+- `/minutes-brief` — Get a fast one-page brief before an upcoming meeting. Category: Lifecycle. Example: `/minutes-brief`. Docs: https://useminutes.app/for-agents#minutes-brief
+- `/minutes-debrief` — Turn the latest meeting into decisions, follow-ups, and what changed from prep. Category: Lifecycle. Example: `/minutes-debrief`. Docs: https://useminutes.app/for-agents#minutes-debrief
+- `/minutes-prep` — Do a deeper relationship brief and talking-point prep before an important call. Category: Lifecycle. Example: `/minutes-prep Alex`. Docs: https://useminutes.app/for-agents#minutes-prep
+- `/minutes-x1-closeout` — Turn an explicit meeting outcome into a sourced X1 closeout proposal without letting the agent close the work. Category: Lifecycle. Example: `/minutes-x1-closeout capital call review`. Docs: https://useminutes.app/for-agents#minutes-x1-closeout
+- `/minutes-x1-send-meeting` — Get a meeting's decisions and follow-ups into your X1 household review queue without pasting a transcript or letting the agent write your record. Category: Lifecycle. Example: `/minutes-x1-send-meeting estate plan review with our attorney`. Docs: https://useminutes.app/for-agents#minutes-x1-send-meeting
+- `/minutes-weekly` — See weekly themes, stale commitments, and what deserves attention next. Category: Lifecycle. Example: `/minutes-weekly`. Docs: https://useminutes.app/for-agents#minutes-weekly
+- `/minutes-mcp-recall` — Route a meeting-memory question to the smallest useful read-only MCP tool. Category: Search. Example: `/minutes-mcp-recall what did we discuss about pricing?`. Docs: https://useminutes.app/for-agents#minutes-mcp-recall
+- `/minutes-search` — Find a topic, quote, person, or decision across past transcripts. Category: Search. Example: `/minutes-search pricing strategy`. Docs: https://useminutes.app/for-agents#minutes-search
+
+## Output Format
+
+Meetings are stored as markdown with YAML frontmatter:
+
+```yaml
+---
+title: Q2 Pricing Discussion
+type: meeting
+date: 2026-03-17T14:00:00
+duration: 42m
+attendees: [Alex K., Jordan M.]
+action_items:
+  - assignee: mat
+    task: Send pricing doc
+    due: Friday
+    status: open
+decisions:
+  - text: Run pricing experiment at monthly billing
+    topic: pricing
+---
+```
+
+## Capabilities For Agents
+
+1. Meeting recall — Search and retrieve past meetings, memos, and transcripts.
+2. People memory — Who said what, what they committed to, and what you owe them, built only from meetings you let agents read.
+3. Decision and action-item tracking — Query structured decisions, commitments, and open follow-ups.
+4. Recording and live transcript control — Start or stop capture and read live transcript deltas.
+5. Local-first context — Audio processing happens on-device and the durable output is inspectable markdown.
+
+## Documentation
+
+- Agent entry point: https://useminutes.app/for-agents
+- Proof and eval caveats: https://useminutes.app/proof
+- Full agent index: https://useminutes.app/llms-full.txt
+- MCP tools reference: https://useminutes.app/docs/mcp/tools
+- MCP tools markdown: https://useminutes.app/docs/mcp/tools.md
+- Repository: https://github.com/silverstein/minutes
+- MCP server package: https://www.npmjs.com/package/minutes-mcp
+- SDK package: https://www.npmjs.com/package/minutes-sdk
+- Support: https://github.com/silverstein/minutes/discussions
+
+## Notes
+
+- This file is intentionally concise for retrieval.
+- Public reference docs should eventually live at stable `/docs` and `/docs/*.md` URLs.
+- Install command: `npx minutes-mcp`

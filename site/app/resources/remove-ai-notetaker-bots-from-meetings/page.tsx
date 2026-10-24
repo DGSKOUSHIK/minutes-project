@@ -1,0 +1,280 @@
+import type { Metadata } from "next";
+import { FaqSection } from "@/components/faq-section";
+import { PublicFooter } from "@/components/public-footer";
+import { SectionLabel } from "@/components/section-label";
+import { faqPageSchema, resourceArticleSchema } from "@/lib/schema";
+import { RelatedResources } from "@/components/related-resources";
+
+export const metadata: Metadata = {
+  title: "How to remove AI notetaker bots from your meetings",
+  description:
+    "Stop Otter, Fireflies, and other AI bots joining your Zoom, Meet, and Teams calls, including other people's bots, and the capture that needs no bot.",
+  alternates: {
+    canonical: "/resources/remove-ai-notetaker-bots-from-meetings",
+  },
+};
+
+const faqs = [
+  {
+    question: "How do I stop Otter from automatically joining my meetings?",
+    answer: "In Otter's settings, disable auto-join for calendar events (Otter Assistant / OtterPilot settings), or disconnect your calendar entirely so Otter can't see meeting links. To remove it from a live call, use the meeting platform's participant list to remove the bot like any attendee. Otter's help center documents both paths.",
+  },
+  {
+    question: "How do I remove Fireflies (Fred) from a meeting?",
+    answer: "Remove the Fireflies notetaker from the participant list as host, and in Fireflies settings change the autojoin rule (or disconnect the calendar) so it stops joining future calls. Fireflies' guide documents removal and autojoin settings.",
+  },
+  {
+    question: "Can I block all AI notetaker bots from my meetings?",
+    answer: "Largely, yes: enable the waiting room, require sign-in, and admit only human participants — bots arrive as visible guest participants and can be denied or removed. But you cannot disable another attendee's bot from your side except by removing it per meeting or setting an organizational policy.",
+  },
+  {
+    question: "Is there a way to get AI meeting notes without any bot?",
+    answer: "Yes — device-side capture. Tools like Minutes (open source, on-device) record audio directly on the participant's machine, so no bot ever appears in the meeting, and with Minutes the audio is also transcribed locally rather than uploaded. You should still tell participants you're recording; the difference is architectural, not a way around consent.",
+  },
+] as const;
+
+const sources = [
+  {
+    label: "Otter help: remove Otter Notetaker from your meeting (Zoom, Meet, Teams)",
+    href: "https://help.otter.ai/hc/en-us/articles/14288936562199-Remove-Otter-Notetaker-from-your-meeting-Zoom-Google-Meet-or-Microsoft-Teams",
+  },
+  {
+    label: "Otter help: stop Otter Notetaker from automatically joining meetings",
+    href: "https://help.otter.ai/hc/en-us/articles/12906714508823-Stop-Otter-Notetaker-from-automatically-joining-your-meetings",
+  },
+  {
+    label: "Fireflies guide: remove Fireflies from a meeting or stop it from joining",
+    href: "https://guide.fireflies.ai/articles/7098191513-how-to-remove-fireflies-from-a-meeting-or-stop-it-from-joining",
+  },
+  { label: "Minutes security & privacy architecture", href: "/security" },
+] as const;
+
+
+const LAST_REVIEWED = "2026-07-11";
+
+export default function RemoveNotetakerBotsPage() {
+  return (
+    <div className="mx-auto max-w-[980px] px-6 pb-16 pt-10 sm:px-8 sm:pt-14">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify([
+            resourceArticleSchema({ metadata, path: "/resources/remove-ai-notetaker-bots-from-meetings", lastReviewed: LAST_REVIEWED, sources }),
+            faqPageSchema(faqs),
+          ]) }}
+      />
+      <div className="mb-10 flex items-center justify-between border-b border-[color:var(--border)] pb-4">
+        <a href="/" className="font-mono text-[15px] font-medium text-[var(--text)]">
+          minutes
+        </a>
+        <div className="flex gap-5 text-sm text-[var(--text-secondary)]">
+          <a
+            href="/resources/remove-ai-notetaker-bots-from-meetings.md"
+            className="hover:text-[var(--accent)]"
+          >
+            page.md
+          </a>
+          <a href="/security" className="hover:text-[var(--accent)]">
+            security
+          </a>
+          <a href="/compare" className="hover:text-[var(--accent)]">
+            compare
+          </a>
+        </div>
+      </div>
+
+      <section className="max-w-[800px]">
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--accent)]">
+          Resource
+        </p>
+        <h1 className="mt-4 font-serif text-[40px] leading-[0.98] tracking-[-0.045em] text-[var(--text)] sm:text-[58px]">
+          How to remove AI notetaker bots from your meetings
+        </h1>
+        <p className="mt-5 text-[17px] leading-8 text-[var(--text-secondary)]">
+          The most-searched questions about AI notetakers aren&rsquo;t &ldquo;which one is
+          best&rdquo; — they&rsquo;re &ldquo;how do I get this thing out of my call.&rdquo;
+          Fair. Here&rsquo;s the complete removal guide for the common bots, the settings that
+          stop them coming back, and the practical limits of what you can control when the bot
+          belongs to someone else.
+        </p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <span className="rounded-full bg-[var(--bg-elevated)] px-3 py-1 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+            Last reviewed: {LAST_REVIEWED}
+          </span>
+          <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--accent)]">
+            How-to guide
+          </span>
+        </div>
+      </section>
+
+      <section className="mt-14 max-w-[800px]">
+        <SectionLabel label="Why The Bot Keeps Showing Up" />
+        <div className="space-y-4 text-[15px] leading-8 text-[var(--text-secondary)]">
+          <p>
+            Bot notetakers join meetings the same way a person does: they read a connected
+            calendar, find the meeting link, and dial in as a participant. That means there are
+            exactly three levers — the calendar connection that feeds it links, the vendor
+            setting that tells it to auto-join, and the meeting platform&rsquo;s participant
+            controls. Every fix below is one of those three.
+          </p>
+        </div>
+      </section>
+
+      <section className="mt-14 max-w-[800px]">
+        <SectionLabel label="Removing Your Own Bot" />
+        <div className="space-y-4 text-[15px] leading-8 text-[var(--text-secondary)]">
+          <p>
+            <span className="font-medium text-[var(--text)]">Otter (OtterPilot / Otter Notetaker).</span>{" "}
+            To stop it joining everything: Otter settings → turn off auto-join for calendar
+            events, or disconnect Google/Microsoft calendar entirely so it never sees links. To
+            eject it from one live meeting: open the participant list in Zoom/Meet/Teams and
+            remove it like any attendee. Both procedures are in Otter&rsquo;s help center,
+            linked below. Faster than either, and available to non-hosts: type{" "}
+            <code className="rounded-[4px] bg-[var(--bg-elevated)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--text)]">
+              stop otter
+            </code>{" "}
+            in the meeting chat. Full detail in{" "}
+            <a
+              href="/resources/remove-otter-ai-from-zoom"
+              className="text-[var(--accent)] hover:underline"
+            >
+              how to remove Otter AI from Zoom
+            </a>
+            .
+          </p>
+          <p>
+            <span className="font-medium text-[var(--text)]">Fireflies (Fred).</span> Same
+            pattern: Fireflies settings → autojoin rules (change to invite-only or off, or
+            disconnect the calendar), and remove the notetaker from the participant list
+            mid-call. Fireflies&rsquo; own guide is linked below. One detail worth knowing
+            before the call rather than during it: Fireflies says that removing the notetaker
+            within three minutes means no transcript or notes are created. Full detail in{" "}
+            <a
+              href="/resources/stop-fireflies-from-joining-meetings"
+              className="text-[var(--accent)] hover:underline"
+            >
+              how to stop Fireflies joining your meetings
+            </a>
+            .
+          </p>
+          <p>
+            <span className="font-medium text-[var(--text)]">
+              Zoom AI Companion and Teams Copilot are not this.
+            </span>{" "}
+            Inside their own platform they are features rather than participants, so there is
+            nothing in the list to eject and the controls are account and policy settings
+            instead. (Zoom AI Companion brought into a Google Meet or Teams meeting is the
+            exception: there it does join as a participant.) See{" "}
+            <a
+              href="/resources/turn-off-built-in-ai-notetakers"
+              className="text-[var(--accent)] hover:underline"
+            >
+              turning off built-in AI notetakers
+            </a>
+            .
+          </p>
+          <p>
+            <span className="font-medium text-[var(--text)]">Anything else.</span> The pattern
+            generalizes: find the calendar connection and sever it, find the auto-join rule and
+            turn it off. If a bot has no calendar access, it has no way to find your meetings.
+          </p>
+        </div>
+      </section>
+
+      <section className="mt-14 max-w-[800px]">
+        <SectionLabel label="Blocking Other People's Bots" />
+        <div className="space-y-4 text-[15px] leading-8 text-[var(--text-secondary)]">
+          <p>
+            This is the part vendors&rsquo; help pages soft-pedal: you cannot disable a
+            colleague&rsquo;s or client&rsquo;s bot from your side. What you can do as host:
+          </p>
+          <ul className="list-disc space-y-2 pl-6">
+            <li>
+              Enable the waiting room / lobby and admit only humans — bots arrive as visible
+              guest participants with names like &ldquo;Otter Notetaker&rdquo; or
+              &ldquo;Fireflies.ai Notetaker.&rdquo;
+            </li>
+            <li>Require signed-in participants, which blocks most anonymous bot joins.</li>
+            <li>Remove the bot from the participant list; in Zoom, removed participants can be barred from rejoining.</li>
+            <li>
+              Say it out loud: &ldquo;please drop the notetaker for this one&rdquo; is now normal
+              meeting etiquette, and the human who owns the bot can kill it in one click.
+            </li>
+          </ul>
+          <p>
+            For organizations, the durable fix is policy plus platform controls: several
+            platforms let admins restrict which apps and guest domains can join meetings at the
+            tenant level.
+          </p>
+        </div>
+      </section>
+
+      <section className="mt-14 max-w-[800px]">
+        <SectionLabel label="The Version Of This Problem That Solves Itself" />
+        <div className="space-y-4 text-[15px] leading-8 text-[var(--text-secondary)]">
+          <p>
+            Notice that every step above is managing a symptom. The bot exists because
+            cloud notetakers need a way to get your meeting&rsquo;s audio onto their servers,
+            and joining the call as a fake participant is that way. Capture the audio on the
+            participant&rsquo;s own device instead, and the entire category of problem
+            disappears — nothing joins the call, nothing shows up in the participant list,
+            nothing needs admitting or ejecting.
+          </p>
+          <p>
+            That&rsquo;s how <span className="font-medium text-[var(--text)]">Minutes</span>{" "}
+            works: it records device-side, transcribes locally with whisper.cpp, and writes
+            markdown to your own disk — no bot <em>and</em> no cloud. (Granola is also botless,
+            though it transcribes in the cloud — see our{" "}
+            <a
+              href="/compare/granola-vs-minutes"
+              className="text-[var(--accent)] hover:underline"
+            >
+              comparison
+            </a>
+            .) One thing device-side capture does not change: tell people you&rsquo;re
+            recording. The bot&rsquo;s one virtue was announcing itself; without it, consent is
+            on you, where it belonged anyway.
+          </p>
+        </div>
+      </section>
+
+      <section className="mt-14 rounded-[8px] border border-[color:var(--border)] bg-[var(--bg-elevated)] p-6 shadow-[var(--shadow-panel)]">
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--accent)]">
+          Next step
+        </p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <a
+            href="/security"
+            className="inline-flex items-center rounded-[5px] bg-[var(--accent)] px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-black hover:bg-[var(--accent-hover)]"
+          >
+            How botless capture works
+          </a>
+          <a
+            href="/compare"
+            className="inline-flex items-center rounded-[5px] border border-[color:var(--border-mid)] px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--text)] hover:bg-[var(--bg-hover)]"
+          >
+            Compare notetakers
+          </a>
+        </div>
+      </section>
+
+      <FaqSection items={faqs} />
+
+      <section className="mt-14">
+        <SectionLabel label="Sources" />
+        <ul className="space-y-2 text-[14px] leading-7 text-[var(--text-secondary)]">
+          {sources.map((source) => (
+            <li key={source.href}>
+              <a href={source.href} className="text-[var(--accent)] hover:underline">
+                {source.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <RelatedResources slug="remove-ai-notetaker-bots-from-meetings" />
+
+      <PublicFooter />
+    </div>
+  );
+}

@@ -1,0 +1,51 @@
+{
+  "manifest_version": "0.2",
+  "name": "minutes",
+  "display_name": "Minutes",
+  "version": "0.1.0",
+  "description": "Conversation memory for Claude: record, search, and research meetings and voice memos from local markdown artifacts.",
+  "long_description": "Minutes gives Claude a local-first conversation memory layer. Record meetings and quick thoughts, search transcripts, inspect structured intents, run consistency reports, profile people across meetings, register your notes with QMD, and research a topic across past conversations without uploading your artifacts to a separate cloud app.",
+  "author": {
+    "name": "Mat Silverstein",
+    "url": "https://github.com/silverstein/minutes"
+  },
+  "homepage": "https://github.com/silverstein/minutes",
+  "documentation": "https://github.com/silverstein/minutes/tree/main/integrations/claude-cowork-extension",
+  "support": "https://github.com/silverstein/minutes/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/silverstein/minutes.git"
+  },
+  "license": "MIT",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/index.js"
+      ]
+    }
+  },
+  "tools": [
+    { "name": "start_recording", "description": "Start live capture with Minutes" },
+    { "name": "stop_recording", "description": "Stop capture and process the recording" },
+    { "name": "get_status", "description": "Check current recording or processing status" },
+    { "name": "list_meetings", "description": "List recent normal meetings and memos; restricted items are excluded by policy" },
+    { "name": "search_meetings", "description": "Search normal transcripts or structured intents; restricted items are excluded by policy" },
+    { "name": "research_topic", "description": "Research a topic across meetings, decisions, and open follow-ups" },
+    { "name": "consistency_report", "description": "Flag conflicting decisions and stale commitments" },
+    { "name": "get_person_profile", "description": "Build a profile for a person across meetings" },
+    { "name": "get_meeting", "description": "Read a normal meeting or memo artifact; restricted items return a content-free stub" },
+    { "name": "process_audio", "description": "Process audio from the Minutes inbox or Downloads; retained library recordings are unavailable" },
+    { "name": "add_note", "description": "Add a note to the current active recording" }
+  ],
+  "keywords": [
+    "meetings",
+    "memory",
+    "transcripts",
+    "voice-memos",
+    "mcp",
+    "claude"
+  ]
+}

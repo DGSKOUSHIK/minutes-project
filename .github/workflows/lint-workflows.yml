@@ -1,0 +1,144 @@
+name: Lint workflows
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  ACTIONLINT_IMAGE: rhysd/actionlint:1.7.7@sha256:1d74bfc9fd1963af8f89a7c22afaaafd42f49aad711a09951d02cb996398f61d
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Lint workflows
+        run: >-
+          docker run --rm
+          --volume "$GITHUB_WORKSPACE:/repo"
+          --workdir /repo
+          "$ACTIONLINT_IMAGE"
+
+      - name: Check runner context expressions
+        run: node scripts/check_workflow_runner_context.mjs
+
+      - name: Check signed acceptance trust boundary
+        run: |
+          node scripts/check_signed_acceptance_policy.mjs
+          node scripts/check_signed_acceptance_policy.test.mjs
+
+      - name: Check graph worker packaging parity
+        run: |
+          node scripts/check_graph_worker_packaging.mjs
+          node scripts/check_graph_worker_packaging.mjs --self-test
+          python3 scripts/seal_graph_worker_hash.py --self-test
+          node scripts/check_apple_speech_worker_packaging.mjs
+          node scripts/check_apple_speech_worker_packaging.mjs --self-test
+          python3 scripts/test_apple_speech_watcher.py
+          python3 scripts/seal_apple_speech_worker_hash.py --self-test
+
+      - name: Check sherpa archive packaging
+        # Release CLI Binaries only runs on tags, so nothing else on a pull
+        # request notices when the sherpa archive stops shipping a working
+        # engine (#685 broke it and every gate stayed green).
+        run: |
+          python3 scripts/check_sherpa_packaging.py
+          python3 scripts/check_sherpa_packaging.py --self-test
+
+      - name: Check release uploads preserve drafts
+        run: |
+          python3 scripts/check_release_upload_drafts.py
+          python3 scripts/check_release_upload_drafts.py --self-test
+
+      - name: Verify broken workflow is rejected
+        run: |
+          if docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/repo" \
+            --workdir /repo \
+            "$ACTIONLINT_IMAGE" \
+            tests/fixtures/workflows/broken.yml
+          then
+            echo "actionlint unexpectedly accepted the broken workflow fixture" >&2
+            exit 1
+          fi
+
+      - name: Verify runner context checks
+        run: |
+          if node scripts/check_workflow_runner_context.mjs \
+            tests/fixtures/workflows/runner-context.yml
+          then
+            echo "runner-context check unexpectedly accepted the broken fixture" >&2
+            exit 1
+          fi
+          if node scripts/check_workflow_runner_context.mjs \
+            tests/fixtures/workflows/runner-context-indexed.yaml
+          then
+            echo "runner-context check unexpectedly accepted indexed access" >&2
+            exit 1
+          fi
+          if node scripts/check_workflow_runner_context.mjs \
+            tests/fixtures/workflows/runner-context-format-braces.yml
+          then
+            echo "runner-context check unexpectedly accepted format braces" >&2
+            exit 1
+          fi
+          node scripts/check_workflow_runner_context.mjs \
+            tests/fixtures/workflows/runner-context-comment-only.yml
+
+      - name: Verify unsafe signed acceptance is rejected
+        run: |
+          if node scripts/check_signed_acceptance_policy.mjs \
+            tests/fixtures/workflows/unsafe-signed-acceptance.yml
+          then
+            echo "signed acceptance policy unexpectedly accepted the unsafe fixture" >&2
+            exit 1
+          fi
+          for fixture in \
+            tests/fixtures/workflows/unsafe-signed-local-action.yml \
+            tests/fixtures/workflows/unsafe-signed-payload-run.yml
+          do
+            if node scripts/check_signed_acceptance_policy.mjs \
+              --signing-job-fixture "$fixture"
+            then
+              echo "signed acceptance policy accepted candidate execution: $fixture" >&2
+              exit 1
+            fi
+          done
+
+  intel-swift-bridge:
+    name: Swift bridge (Intel macOS 15)
+    runs-on: macos-15-intel
+    timeout-minutes: 10
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Type-check the production bridge with the required SDK
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+          xcrun swiftc -typecheck -parse-as-library \
+            -target x86_64-apple-macos11.0 \
+            crates/core/src/macos_graph_xpc_authority.swift \
+            crates/core/src/macos_apple_speech_bridge.swift
+
+  dev-app-signing:
+    name: Development bundle signing (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Verify native nested signing and damaged-seal refusal
+        run: python3 scripts/test_dev_app_signing.py
